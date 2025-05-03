@@ -2,3 +2,6 @@
 
 A Go library for building persistent, type-safe finite state machines. It provides a simple way to model complex workflows with guaranteed state transitions and persistence.
 
+## Example
+
+See `example/main.go`

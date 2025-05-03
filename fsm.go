@@ -13,15 +13,60 @@ import (
 	"github.com/egoodhall/fsm/gen/sqlc"
 )
 
+// Represents a state in the state machine. This identifies
+// where a given task is in the state machine. The default
+// states are:
+// - __initial__: The task has been submitted but not yet processed
+// - __done__: The task has completed successfully
+// - __error__: A transition failed
+type State string
+
+const (
+	StateInitial State = "__initial__"
+	StateDone    State = "__done__"
+	StateError   State = "__error__"
+)
+
+// New creates a new state machine
+// The name is used to identify the state machine in the database.
+func New[IN any, OUT any](name string) InitialStateBuilder[IN, OUT] {
+	return &fsm[IN, OUT]{
+		name: name,
+		rest: make(map[State]NthTransition[IN, OUT]),
+	}
+}
+
+// FSM is a finite state machine. It tracks the state of a task
+// and transitions it between states based on the input. State is
+// persisted in a SQLite database.
+type FSM[IN any, OUT any] interface {
+	Start(ctx context.Context) (SubmitFunc[IN], context.CancelFunc, error)
+}
+
+// InitialStateBuilder is a builder for the initial state transition of the state machine.
+type InitialStateBuilder[IN any, OUT any] interface {
+	InitialState(transition FirstTransition[IN, OUT]) NthStateBuilder[IN, OUT]
+}
+
+// NthStateBuilder is a builder for state transitions other than the initial state.
+type NthStateBuilder[IN any, OUT any] interface {
+	AddState(state State, transition NthTransition[IN, OUT]) NthStateBuilder[IN, OUT]
+	Build(ctx context.Context, opts ...Option[IN, OUT]) (FSM[IN, OUT], error)
+}
+
+// SubmitFunc is a function that submits a task to the state machine.
+type SubmitFunc[IN any] func(ctx context.Context, id int64, event IN) (int64, error)
+
 var _ FSM[any, any] = new(fsm[any, any])
 
 type fsm[IN any, OUT any] struct {
 	lock sync.Mutex
 
 	// Configurable fields
-	name   string
-	logger *slog.Logger
-	db     sqlc.Querier
+	name         string
+	logger       *slog.Logger
+	db           sqlc.Querier
+	onTransition OnTransitionFunc
 
 	// State machine states
 	first FirstTransition[IN, OUT]
@@ -164,9 +209,8 @@ func (f *fsm[IN, OUT]) transition(ctx context.Context, task sqlc.Task) error {
 		return fmt.Errorf("transition error: %w", err)
 	}
 
-	f.logger.Info("Transitioning task", "id", task.ID, "from", transition.ToState, "to", out.NextState())
-	if err := f.db.RecordTransition(ctx, task.ID, transition.ToState, string(out.NextState()), out.Data()); err != nil {
-		return fmt.Errorf("record transition: %w", err)
+	if err := f.commitTransition(ctx, task, transition, out); err != nil {
+		return fmt.Errorf("commit transition: %w", err)
 	}
 
 	if out.NextState() != StateDone {
@@ -175,80 +219,15 @@ func (f *fsm[IN, OUT]) transition(ctx context.Context, task sqlc.Task) error {
 	return nil
 }
 
-var _ FirstInput[any] = new(firstInput[any])
-
-type firstInput[IN any] struct {
-	id     int64
-	event  IN
-	logger *slog.Logger
-}
-
-func (r *firstInput[IN]) ID() int64 {
-	return r.id
-}
-
-func (r *firstInput[IN]) Input() IN {
-	return r.event
-}
-
-func (r *firstInput[IN]) Logger() *slog.Logger {
-	return r.logger
-}
-
-var _ NthInput[any, any] = new(nthInput[any, any])
-
-type nthInput[IN any, OUT any] struct {
-	id     int64
-	event  IN
-	output OUT
-	logger *slog.Logger
-}
-
-func (r *nthInput[IN, OUT]) ID() int64 {
-	return r.id
-}
-
-func (r *nthInput[IN, OUT]) Input() IN {
-	return r.event
-}
-
-func (r *nthInput[IN, OUT]) Previous() OUT {
-	return r.output
-}
-
-func (r *nthInput[IN, OUT]) Logger() *slog.Logger {
-	return r.logger
-}
-
-func GoTo[T any](state State, data T) (Output, error) {
-	var buf bytes.Buffer
-	if err := gob.NewEncoder(&buf).Encode(data); err != nil && err.Error() == "gob: cannot encode nil value" {
-		return &output{state: state, data: buf.Bytes()}, nil
-	} else if err != nil {
-		return nil, fmt.Errorf("marshal output: %w", err)
+func (f *fsm[IN, OUT]) commitTransition(ctx context.Context, task sqlc.Task, transition sqlc.StateTransition, out Output) error {
+	f.logger.Info("Transitioning task", "id", task.ID, "from", transition.ToState, "to", out.NextState())
+	if err := f.db.RecordTransition(ctx, task.ID, transition.ToState, string(out.NextState()), out.Data()); err != nil {
+		return fmt.Errorf("record transition: %w", err)
 	}
-	return &output{state: state, data: buf.Bytes()}, nil
-}
 
-func Done() (Output, error) {
-	return GoTo[any](StateDone, nil)
-}
+	if f.onTransition != nil {
+		f.onTransition(ctx, task.ID, State(transition.ToState), out.NextState())
+	}
 
-func Error[T any](err error) (Output, error) {
-	return &output{state: StateError, data: []byte(err.Error())}, nil
-}
-
-var _ Output = new(output)
-
-type output struct {
-	state State
-	data  []byte
-}
-
-func (r *output) NextState() State {
-	return r.state
-}
-
-func (r *output) Data() []byte {
-	return r.data
+	return nil
 }

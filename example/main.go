@@ -36,7 +36,13 @@ func main() {
 		AddState(StateB, func(ctx context.Context, req fsm.NthInput[string, TaskState]) (fsm.Output, error) {
 			return fsm.GoTo(StateA, TaskState{States: append(req.Previous().States, StateB)})
 		}).
-		Build(ctx, fsm.Logger[string, TaskState](slog.Default()), fsm.DB[string, TaskState]("fsm.db"))
+		Build(ctx,
+			fsm.Logger[string, TaskState](slog.Default()),
+			fsm.DB[string, TaskState]("fsm.db"),
+			fsm.OnTransition[string, TaskState](func(ctx context.Context, id int64, from, to fsm.State) {
+				slog.Info("Task transitioned", "id", id, "from", from, "to", to)
+			}),
+		)
 
 	if err != nil {
 
