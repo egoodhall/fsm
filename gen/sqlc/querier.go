@@ -10,13 +10,13 @@ import (
 
 type Querier interface {
 	CreateStateMachine(ctx context.Context, name string) (int64, error)
-	CreateTask(ctx context.Context, fsmID int64, iD string, event []byte) (Task, error)
-	GetHistory(ctx context.Context, taskID string) ([]StateTransition, error)
-	GetLastValidTransition(ctx context.Context, taskID string) (StateTransition, error)
+	CreateTask(ctx context.Context, fsmID int64, event []byte) (Task, error)
+	GetHistory(ctx context.Context, taskID int64) ([]StateTransition, error)
+	GetLastValidTransition(ctx context.Context, taskID int64) (StateTransition, error)
 	GetStateMachine(ctx context.Context, id int64) (StateMachine, error)
-	GetTaskState(ctx context.Context, taskID string) (string, error)
+	GetTaskState(ctx context.Context, taskID int64) (string, error)
 	ListTasks(ctx context.Context) ([]Task, error)
-	RecordTransition(ctx context.Context, taskID string, fromState string, toState string, output []byte) error
+	RecordTransition(ctx context.Context, taskID int64, fromState string, toState string, output []byte) error
 }
 
 var _ Querier = (*Queries)(nil)

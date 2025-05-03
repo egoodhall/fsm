@@ -12,7 +12,7 @@ type StateMachine struct {
 
 type StateTransition struct {
 	ID        int64
-	TaskID    string
+	TaskID    int64
 	FromState string
 	ToState   string
 	Output    []byte
@@ -20,7 +20,7 @@ type StateTransition struct {
 }
 
 type Task struct {
-	ID        string
+	ID        int64
 	Event     []byte
 	FsmID     int64
 	CreatedAt int64

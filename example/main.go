@@ -9,27 +9,34 @@ import (
 	"github.com/egoodhall/fsm"
 )
 
+const (
+	StateA fsm.State = "a"
+	StateB fsm.State = "b"
+)
+
+type TaskState struct {
+	States []fsm.State
+}
+
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
-	machine, err := fsm.New[string, string]("example").
+	machine, err := fsm.New[string, TaskState]("example").
 		InitialState(func(ctx context.Context, req fsm.FirstInput[string]) (fsm.Output, error) {
-			if req.Input() != "a" {
-				return fsm.Done()
-			}
-			return fsm.GoTo("a", "_")
+			return fsm.GoTo(StateA, TaskState{States: make([]fsm.State, 0)})
 		}).
-		AddState("a", func(ctx context.Context, req fsm.NthInput[string, string]) (fsm.Output, error) {
-			if req.Previous() == "_" {
-				return fsm.GoTo("b", req.Previous()+"a")
+		AddState(StateA, func(ctx context.Context, req fsm.NthInput[string, TaskState]) (fsm.Output, error) {
+			if len(req.Previous().States) == 0 {
+				return fsm.GoTo(StateB, TaskState{States: append(req.Previous().States, StateA)})
 			}
+			req.Logger().Info("Exiting from state A", "id", req.ID(), "states", req.Previous().States)
 			return fsm.Done()
 		}).
-		AddState("b", func(ctx context.Context, req fsm.NthInput[string, string]) (fsm.Output, error) {
-			return fsm.GoTo("a", req.Previous()+"b")
+		AddState(StateB, func(ctx context.Context, req fsm.NthInput[string, TaskState]) (fsm.Output, error) {
+			return fsm.GoTo(StateA, TaskState{States: append(req.Previous().States, StateB)})
 		}).
-		Build(ctx, fsm.Logger[string, string](slog.Default()), fsm.DB[string, string]("fsm.db"))
+		Build(ctx, fsm.Logger[string, TaskState](slog.Default()), fsm.DB[string, TaskState]("fsm.db"))
 
 	if err != nil {
 
@@ -44,16 +51,16 @@ func main() {
 	}
 	defer stop()
 
-	if err := submit(ctx, "1", "a"); err != nil {
-		slog.Error("Failed to submit task", "error", err)
+	if id, err := submit(ctx, "a"); err != nil {
+		slog.Error("Failed to submit task", "id", id, "error", err)
 	}
 
-	if err := submit(ctx, "2", "a"); err != nil {
-		slog.Error("Failed to submit task", "error", err)
+	if id, err := submit(ctx, "a"); err != nil {
+		slog.Error("Failed to submit task", "id", id, "error", err)
 	}
 
-	if err := submit(ctx, "3", "b"); err != nil {
-		slog.Error("Failed to submit task", "error", err)
+	if id, err := submit(ctx, "b"); err != nil {
+		slog.Error("Failed to submit task", "id", id, "error", err)
 	}
 
 	<-ctx.Done()

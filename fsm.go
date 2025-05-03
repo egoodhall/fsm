@@ -1,16 +1,16 @@
 package fsm
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
-	"encoding/json"
+	"encoding/gob"
 	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
 
 	"github.com/egoodhall/fsm/gen/sqlc"
-	"github.com/mattn/go-sqlite3"
 )
 
 var _ FSM[any, any] = new(fsm[any, any])
@@ -61,23 +61,16 @@ func (f *fsm[IN, OUT]) shutdown() {
 	f.lock.Unlock()
 }
 
-func (f *fsm[IN, OUT]) submit(ctx context.Context, id string, event IN) error {
-	json, err := json.Marshal(event)
-	if err != nil {
-		return err
-	}
-
-	if task, err := f.db.CreateTask(ctx, f.id, id, json); err != nil {
-		sqlerr, ok := err.(sqlite3.Error)
-		if ok && sqlerr.Code == sqlite3.ErrConstraint {
-			return fmt.Errorf("task already exists: id=%s", id)
-		}
-		return err
+func (f *fsm[IN, OUT]) submit(ctx context.Context, event IN) (int64, error) {
+	var buf bytes.Buffer
+	if err := gob.NewEncoder(&buf).Encode(event); err != nil {
+		return 0, err
+	} else if task, err := f.db.CreateTask(ctx, f.id, buf.Bytes()); err != nil {
+		return 0, fmt.Errorf("persist task: %w", err)
 	} else {
 		f.enqueue(task)
+		return task.ID, nil
 	}
-
-	return nil
 }
 
 func (f *fsm[IN, OUT]) process(ctx context.Context) {
@@ -133,7 +126,7 @@ func (f *fsm[IN, OUT]) transition(ctx context.Context, task sqlc.Task) error {
 	}
 
 	var event IN
-	if err := json.Unmarshal(task.Event, &event); err != nil {
+	if err := gob.NewDecoder(bytes.NewReader(task.Event)).Decode(&event); err != nil {
 		return fmt.Errorf("unmarshal event: %w", err)
 	}
 
@@ -145,23 +138,23 @@ func (f *fsm[IN, OUT]) transition(ctx context.Context, task sqlc.Task) error {
 		f.logger.Info("Completed task", "id", task.ID)
 		return nil
 	case StateInitial:
-		out, err = f.first(ctx, &firstInput[IN]{id: task.ID, event: event})
+		out, err = f.first(ctx, &firstInput[IN]{id: task.ID, event: event, logger: f.logger})
 	default:
 		var prevout OUT
 		if transition.Output != nil {
-			if err := json.Unmarshal(transition.Output, &prevout); err != nil {
+			if err := gob.NewDecoder(bytes.NewReader(transition.Output)).Decode(&prevout); err != nil {
 				return fmt.Errorf("unmarshal output: %w", err)
 			}
 		}
 		if transition, ok := f.rest[State(transition.ToState)]; ok {
-			out, err = transition(ctx, &nthInput[IN, OUT]{id: task.ID, event: event, output: prevout})
+			out, err = transition(ctx, &nthInput[IN, OUT]{id: task.ID, event: event, output: prevout, logger: f.logger})
 		}
 	}
 	if err != nil {
 		return fmt.Errorf("transition error: %w", err)
 	}
 
-	f.logger.Info("Transitioning task", "id", task.ID, "from", transition.ToState, "to", out.NextState(), "output", string(out.Data()))
+	f.logger.Info("Transitioning task", "id", task.ID, "from", transition.ToState, "to", out.NextState())
 	if err := f.db.RecordTransition(ctx, task.ID, transition.ToState, string(out.NextState()), out.Data()); err != nil {
 		return fmt.Errorf("record transition: %w", err)
 	}
@@ -175,11 +168,12 @@ func (f *fsm[IN, OUT]) transition(ctx context.Context, task sqlc.Task) error {
 var _ FirstInput[any] = new(firstInput[any])
 
 type firstInput[IN any] struct {
-	id    string
-	event IN
+	id     int64
+	event  IN
+	logger *slog.Logger
 }
 
-func (r *firstInput[IN]) ID() string {
+func (r *firstInput[IN]) ID() int64 {
 	return r.id
 }
 
@@ -187,15 +181,20 @@ func (r *firstInput[IN]) Input() IN {
 	return r.event
 }
 
+func (r *firstInput[IN]) Logger() *slog.Logger {
+	return r.logger
+}
+
 var _ NthInput[any, any] = new(nthInput[any, any])
 
 type nthInput[IN any, OUT any] struct {
-	id     string
+	id     int64
 	event  IN
 	output OUT
+	logger *slog.Logger
 }
 
-func (r *nthInput[IN, OUT]) ID() string {
+func (r *nthInput[IN, OUT]) ID() int64 {
 	return r.id
 }
 
@@ -207,13 +206,18 @@ func (r *nthInput[IN, OUT]) Previous() OUT {
 	return r.output
 }
 
+func (r *nthInput[IN, OUT]) Logger() *slog.Logger {
+	return r.logger
+}
+
 func GoTo[T any](state State, data T) (Output, error) {
-	json, err := json.Marshal(data)
-	if err != nil {
+	var buf bytes.Buffer
+	if err := gob.NewEncoder(&buf).Encode(data); err != nil && err.Error() == "gob: cannot encode nil value" {
+		return &output{state: state, data: buf.Bytes()}, nil
+	} else if err != nil {
 		return nil, fmt.Errorf("marshal output: %w", err)
 	}
-
-	return &output{state: state, data: json}, nil
+	return &output{state: state, data: buf.Bytes()}, nil
 }
 
 func Done() (Output, error) {

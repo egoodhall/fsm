@@ -15,7 +15,7 @@ WHERE task_id = ?
 ORDER BY created_at ASC
 `
 
-func (q *Queries) GetHistory(ctx context.Context, taskID string) ([]StateTransition, error) {
+func (q *Queries) GetHistory(ctx context.Context, taskID int64) ([]StateTransition, error) {
 	rows, err := q.db.QueryContext(ctx, getHistory, taskID)
 	if err != nil {
 		return nil, err
@@ -53,7 +53,7 @@ ORDER BY created_at DESC
 LIMIT 1
 `
 
-func (q *Queries) GetLastValidTransition(ctx context.Context, taskID string) (StateTransition, error) {
+func (q *Queries) GetLastValidTransition(ctx context.Context, taskID int64) (StateTransition, error) {
 	row := q.db.QueryRowContext(ctx, getLastValidTransition, taskID)
 	var i StateTransition
 	err := row.Scan(
@@ -75,7 +75,7 @@ ORDER BY created_at DESC
 LIMIT 1
 `
 
-func (q *Queries) GetTaskState(ctx context.Context, taskID string) (string, error) {
+func (q *Queries) GetTaskState(ctx context.Context, taskID int64) (string, error) {
 	row := q.db.QueryRowContext(ctx, getTaskState, taskID)
 	var to_state string
 	err := row.Scan(&to_state)
@@ -87,7 +87,7 @@ INSERT INTO state_transitions (task_id, from_state, to_state, output)
 VALUES (?, ?, ?, ?)
 `
 
-func (q *Queries) RecordTransition(ctx context.Context, taskID string, fromState string, toState string, output []byte) error {
+func (q *Queries) RecordTransition(ctx context.Context, taskID int64, fromState string, toState string, output []byte) error {
 	_, err := q.db.ExecContext(ctx, recordTransition,
 		taskID,
 		fromState,

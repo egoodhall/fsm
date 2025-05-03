@@ -2,6 +2,7 @@ package fsm
 
 import (
 	"context"
+	"log/slog"
 )
 
 // Represents a state in the state machine. This identifies
@@ -41,8 +42,9 @@ type NthStateBuilder[IN any, OUT any] interface {
 
 // FirstInput is an input for the initial state transition.
 type FirstInput[IN any] interface {
-	ID() string
+	ID() int64
 	Input() IN
+	Logger() *slog.Logger
 }
 
 // NthInput is an input for state transitions other than the initial state.
@@ -61,7 +63,7 @@ type Output interface {
 }
 
 // SubmitFunc is a function that submits a task to the state machine.
-type SubmitFunc[IN any] func(ctx context.Context, id string, event IN) error
+type SubmitFunc[IN any] func(ctx context.Context, event IN) (int64, error)
 
 // FirstTransition is a function that transitions the task from the initial state to a new state.
 type FirstTransition[IN any, OUT any] func(ctx context.Context, req FirstInput[IN]) (Output, error)
