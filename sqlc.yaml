@@ -1,0 +1,14 @@
+version: "2"
+sql:
+  - engine: "sqlite"
+    queries: "./queries"
+    schema: "./migrations"
+    gen:
+      go:
+        package: "sqlc"
+        out: "./gen/sqlc"
+        sql_package: "database/sql"
+        query_parameter_limit: 4
+        json_tags_case_style: "camel"
+        emit_interface: true
+        emit_pointers_for_null_types: true
