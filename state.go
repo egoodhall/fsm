@@ -14,6 +14,16 @@ import (
 	"github.com/pressly/goose/v3"
 )
 
+func init() {
+	// Register the embedded migrations
+	goose.SetBaseFS(migrations)
+
+	// Force SQLite dialect for goose
+	goose.SetDialect("sqlite3")
+
+	goose.SetLogger(goose.NopLogger())
+}
+
 //go:embed migrations/*.sql
 var migrations embed.FS
 
@@ -24,19 +34,17 @@ func initDB(ctx context.Context, dbPath string) (sqlc.Querier, error) {
 		return nil, fmt.Errorf("create data directory: %w", err)
 	}
 
-	// Register the embedded migrations
-	goose.SetBaseFS(migrations)
-
-	// Force SQLite dialect for goose
-	goose.SetDialect("sqlite3")
-
-	goose.SetLogger(goose.NopLogger())
-
 	// Open the SQLite database
-	db, err := sql.Open("sqlite3", dbPath+"?journal_mode=WAL")
+	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
+
+	return setupDB(db)
+}
+
+// setupDB runs migrations and returns a querier for interacting with the database.
+func setupDB(db *sql.DB) (sqlc.Querier, error) {
 
 	// Run migrations
 	if err := goose.Up(db, "migrations"); err != nil {

@@ -2,6 +2,7 @@ package fsm
 
 import (
 	"context"
+	"database/sql"
 	"log/slog"
 )
 
@@ -16,16 +17,35 @@ func Logger[IN, OUT any](logger *slog.Logger) Option[IN, OUT] {
 	}
 }
 
-// DB sets the database file for the state machine.
+// DB configures a new database connection for the state machine.
 func DB[IN, OUT any](dbFile string) Option[IN, OUT] {
-	return func(ctx context.Context, f *fsm[IN, OUT]) (err error) {
+	return func(ctx context.Context, f *fsm[IN, OUT]) error {
+		var err error
 		if f.db, err = initDB(ctx, dbFile); err != nil {
-			return
+			return err
 		}
 		if f.id, err = f.db.CreateStateMachine(ctx, f.name); err != nil {
-			return
+			return err
 		}
-		return
+		return nil
+	}
+}
+
+func MemDB[IN, OUT any]() Option[IN, OUT] {
+	return DB[IN, OUT]("file:fsm.db?cache=shared&mode=memory")
+}
+
+// WithDB configures the existing database connection for the state machine.
+func WithDB[IN, OUT any](db *sql.DB) Option[IN, OUT] {
+	return func(ctx context.Context, f *fsm[IN, OUT]) error {
+		var err error
+		if f.db, err = setupDB(db); err != nil {
+			return err
+		}
+		if f.id, err = f.db.CreateStateMachine(ctx, f.name); err != nil {
+			return err
+		}
+		return nil
 	}
 }
 
