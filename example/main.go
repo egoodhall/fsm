@@ -51,15 +51,18 @@ func main() {
 	}
 	defer stop()
 
-	if id, err := submit(ctx, "a"); err != nil {
+	// Automatically assigned ID 1
+	if id, err := submit(ctx, 0, "a"); err != nil {
 		slog.Error("Failed to submit task", "id", id, "error", err)
 	}
 
-	if id, err := submit(ctx, "a"); err != nil {
+	// Automatically assigned ID 2
+	if id, err := submit(ctx, 0, "a"); err != nil {
 		slog.Error("Failed to submit task", "id", id, "error", err)
 	}
 
-	if id, err := submit(ctx, "b"); err != nil {
+	// Already assigned, this will fail
+	if id, err := submit(ctx, 1, "b"); err != nil {
 		slog.Error("Failed to submit task", "id", id, "error", err)
 	}
 

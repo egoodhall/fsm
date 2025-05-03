@@ -61,16 +61,26 @@ func (f *fsm[IN, OUT]) shutdown() {
 	f.lock.Unlock()
 }
 
-func (f *fsm[IN, OUT]) submit(ctx context.Context, event IN) (int64, error) {
+func (f *fsm[IN, OUT]) submit(ctx context.Context, id int64, event IN) (int64, error) {
 	var buf bytes.Buffer
 	if err := gob.NewEncoder(&buf).Encode(event); err != nil {
 		return 0, err
-	} else if task, err := f.db.CreateTask(ctx, f.id, buf.Bytes()); err != nil {
-		return 0, fmt.Errorf("persist task: %w", err)
-	} else {
-		f.enqueue(task)
-		return task.ID, nil
 	}
+
+	var task sqlc.Task
+	var err error
+	if id == 0 {
+		task, err = f.db.CreateTask(ctx, f.id, buf.Bytes())
+	} else {
+		task, err = f.db.CreateTaskWithID(ctx, f.id, id, buf.Bytes())
+	}
+
+	if err != nil {
+		return 0, fmt.Errorf("persist task: %w", err)
+	}
+
+	f.enqueue(task)
+	return task.ID, nil
 }
 
 func (f *fsm[IN, OUT]) process(ctx context.Context) {

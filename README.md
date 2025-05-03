@@ -4,5 +4,5 @@ A Go library for building persistent, type-safe finite state machines. It provid
 
 ## Quick Start
 
-[Example](https://github.com/egoodhall/fsm/blob/58ba33b93beb46c46d131c97680d014729c606bc/example/main.go#L12-L67)
+[Example](https://github.com/egoodhall/fsm/blob/58ba33b93beb46c46d131c97680d014729c606bc/example/main.go#L12-L70)
 

@@ -27,6 +27,24 @@ func (q *Queries) CreateTask(ctx context.Context, fsmID int64, event []byte) (Ta
 	return i, err
 }
 
+const createTaskWithID = `-- name: CreateTaskWithID :one
+INSERT INTO tasks (fsm_id, id, event)
+VALUES (?, ?, ?)
+RETURNING id, event, fsm_id, created_at
+`
+
+func (q *Queries) CreateTaskWithID(ctx context.Context, fsmID int64, iD int64, event []byte) (Task, error) {
+	row := q.db.QueryRowContext(ctx, createTaskWithID, fsmID, iD, event)
+	var i Task
+	err := row.Scan(
+		&i.ID,
+		&i.Event,
+		&i.FsmID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const listTasks = `-- name: ListTasks :many
 SELECT id, event, fsm_id, created_at FROM tasks
 ORDER BY id ASC

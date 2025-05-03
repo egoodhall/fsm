@@ -11,6 +11,7 @@ import (
 type Querier interface {
 	CreateStateMachine(ctx context.Context, name string) (int64, error)
 	CreateTask(ctx context.Context, fsmID int64, event []byte) (Task, error)
+	CreateTaskWithID(ctx context.Context, fsmID int64, iD int64, event []byte) (Task, error)
 	GetHistory(ctx context.Context, taskID int64) ([]StateTransition, error)
 	GetLastValidTransition(ctx context.Context, taskID int64) (StateTransition, error)
 	GetStateMachine(ctx context.Context, id int64) (StateMachine, error)

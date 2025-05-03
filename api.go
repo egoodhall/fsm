@@ -63,7 +63,7 @@ type Output interface {
 }
 
 // SubmitFunc is a function that submits a task to the state machine.
-type SubmitFunc[IN any] func(ctx context.Context, event IN) (int64, error)
+type SubmitFunc[IN any] func(ctx context.Context, id int64, event IN) (int64, error)
 
 // FirstTransition is a function that transitions the task from the initial state to a new state.
 type FirstTransition[IN any, OUT any] func(ctx context.Context, req FirstInput[IN]) (Output, error)
