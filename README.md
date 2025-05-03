@@ -1,21 +1,6 @@
 # FSM - Finite State Machine Library
 
-A Go library for building persistent, type-safe finite state machines. This library provides a simple way to model complex workflows with guaranteed state transitions and persistence.
-
-## Features
-
-- Type-safe state transitions with generics
-- Persistent state storage using SQLite
-- Automatic state recovery on restart
-- Built-in error handling and state history
-- Simple builder pattern API
-- Thread-safe task processing
-
-## Installation
-
-```bash
-go get github.com/egoodhall/fsm
-```
+A Go library for building persistent, type-safe finite state machines. It provides a simple way to model complex workflows with guaranteed state transitions and persistence.
 
 ## Quick Start
 
@@ -63,65 +48,21 @@ func main() {
 }
 ```
 
-## Concepts
+## Features
 
-### States
-- `__initial__`: Starting state for new tasks
-- `__done__`: Terminal state for completed tasks
-- `__error__`: State for failed transitions
-- Custom states: Define your own states for your workflow
-
-### Transitions
-- `FirstTransition`: Handles initial state transitions
-- `NthTransition`: Handles transitions between custom states
-- Each transition returns the next state and output data
-
-### Persistence
-- State transitions are stored in SQLite
-- Tasks are automatically resumed on restart
-- Full history of state transitions is maintained
-
-## API Reference
-
-### State Machine Builder
-```go
-fsm.New[IN, OUT](name string) InitialStateBuilder[IN, OUT]
-```
-
-### State Transitions
-```go
-// Initial state transition
-func(ctx context.Context, req FirstInput[IN]) (Output, error)
-
-// Subsequent state transitions
-func(ctx context.Context, req NthInput[IN, OUT]) (Output, error)
-```
-
-### Output Helpers
-```go
-// Transition to a new state with data
-GoTo[T any](state State, data T) (Output, error)
-
-// Complete the task
-Done() (Output, error)
-
-// Mark task as failed
-Error(err error) (Output, error)
-```
+- Type-safe state transitions with generics
+- Persistent state storage using SQLite
+- Automatic state recovery on restart
+- Thread-safe task processing
+- Built-in error handling
 
 ## Development
 
-### Prerequisites
 ```bash
-# Install goose for migrations
+# Install dependencies
 go install github.com/pressly/goose/v3/cmd/goose@latest
-
-# Install sqlc for type-safe SQL
 go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
-```
 
-### Commands
-```bash
 # Generate SQL code
 make generate
 
