@@ -125,6 +125,7 @@ func (f *fsm[IN, OUT]) submit(ctx context.Context, id int64, event IN) (int64, e
 	}
 
 	f.enqueue(task)
+	f.logger.Info("Submitted task", "id", task.ID)
 	return task.ID, nil
 }
 
@@ -169,7 +170,6 @@ func (f *fsm[IN, OUT]) resumeTasks(ctx context.Context) error {
 
 func (f *fsm[IN, OUT]) enqueue(task sqlc.Task) {
 	f.tasks <- task
-	f.logger.Info("Enqueued task", "id", task.ID)
 }
 
 func (f *fsm[IN, OUT]) transition(ctx context.Context, task sqlc.Task) error {

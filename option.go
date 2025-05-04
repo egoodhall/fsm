@@ -39,7 +39,7 @@ func MemDB[IN, OUT any]() Option[IN, OUT] {
 func WithDB[IN, OUT any](db *sql.DB) Option[IN, OUT] {
 	return func(ctx context.Context, f *fsm[IN, OUT]) error {
 		var err error
-		if f.db, err = setupDB(db); err != nil {
+		if f.db, err = setupDB(ctx, db); err != nil {
 			return err
 		}
 		if f.id, err = f.db.CreateStateMachine(ctx, f.name); err != nil {

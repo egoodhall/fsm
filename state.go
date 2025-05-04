@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"embed"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,16 +14,6 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/pressly/goose/v3"
 )
-
-func init() {
-	// Register the embedded migrations
-	goose.SetBaseFS(migrations)
-
-	// Force SQLite dialect for goose
-	goose.SetDialect("sqlite3")
-
-	goose.SetLogger(goose.NopLogger())
-}
 
 //go:embed migrations/*.sql
 var migrations embed.FS
@@ -40,14 +31,24 @@ func initDB(ctx context.Context, dbPath string) (sqlc.Querier, error) {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 
-	return setupDB(db)
+	return setupDB(ctx, db)
 }
 
 // setupDB runs migrations and returns a querier for interacting with the database.
-func setupDB(db *sql.DB) (sqlc.Querier, error) {
+func setupDB(ctx context.Context, db *sql.DB) (sqlc.Querier, error) {
+
+	mdir, err := fs.Sub(migrations, "migrations")
+	if err != nil {
+		return nil, fmt.Errorf("create migrations subdirectory: %w", err)
+	}
+
+	provider, err := goose.NewProvider(goose.DialectSQLite3, db, mdir, goose.WithLogger(goose.NopLogger()))
+	if err != nil {
+		return nil, fmt.Errorf("create goose provider: %w", err)
+	}
 
 	// Run migrations
-	if err := goose.Up(db, "migrations"); err != nil {
+	if _, err := provider.Up(ctx); err != nil {
 		// Check if the error is just that migrations are up-to-date
 		if !strings.Contains(err.Error(), "no change") {
 			return nil, fmt.Errorf("run migrations: %w", err)

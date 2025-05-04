@@ -37,11 +37,8 @@ func main() {
 			return fsm.GoTo(StateA, TaskState{States: append(req.Previous().States, StateB)})
 		}).
 		Build(ctx,
-			fsm.MemDB[string, TaskState](),
+			// fsm.MemDB[string, TaskState](),
 			fsm.Logger[string, TaskState](slog.Default()),
-			fsm.OnTransition[string, TaskState](func(ctx context.Context, id int64, from, to fsm.State) {
-				slog.Info("Task transitioned", "id", id, "from", from, "to", to)
-			}),
 		)
 
 	if err != nil {
