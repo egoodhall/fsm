@@ -30,5 +30,11 @@ func (f *fsm[IN, OUT]) Build(ctx context.Context, opts ...Option[IN, OUT]) (FSM[
 		}
 	}
 
+	id, err := f.store.Q().CreateStateMachine(ctx, f.name)
+	if err != nil {
+		return nil, err
+	}
+	f.id = id
+
 	return f, nil
 }
