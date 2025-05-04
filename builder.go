@@ -30,12 +30,5 @@ func (f *fsm[IN, OUT]) Build(ctx context.Context, opts ...Option[IN, OUT]) (FSM[
 		}
 	}
 
-	// If the database is not set, set it
-	if f.db == nil {
-		if err := DB[IN, OUT]("fsm.db")(ctx, f); err != nil {
-			return nil, err
-		}
-	}
-
 	return f, nil
 }

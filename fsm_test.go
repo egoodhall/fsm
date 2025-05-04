@@ -1,10 +1,11 @@
-package main
+package fsm_test
 
 import (
 	"context"
 	"log/slog"
 	"os"
 	"os/signal"
+	"testing"
 
 	"github.com/egoodhall/fsm"
 )
@@ -18,11 +19,16 @@ type TaskState struct {
 	States []fsm.State
 }
 
-func main() {
+func TestFSM(t *testing.T) {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
-	machine, err := fsm.New[string, TaskState]("example").
+	store, err := fsm.InMemory()
+	if err != nil {
+		t.Fatalf("Failed to create in-memory store: %v", err)
+	}
+
+	machine, err := fsm.New[string, TaskState]("example", store).
 		InitialState(func(ctx context.Context, req fsm.FirstInput[string]) (fsm.Output, error) {
 			return fsm.GoTo(StateA, TaskState{States: make([]fsm.State, 0)})
 		}).
@@ -42,31 +48,29 @@ func main() {
 		)
 
 	if err != nil {
-
-		slog.Error("Failed to build machine", "error", err)
-
+		t.Fatalf("Failed to build machine: %v", err)
 	}
 
 	slog.Info("Starting machine")
 	submit, stop, err := machine.Start(ctx)
 	if err != nil {
-		slog.Error("Failed to start machine", "error", err)
+		t.Fatalf("Failed to start machine: %v", err)
 	}
 	defer stop()
 
 	// Automatically assigned ID 1
 	if id, err := submit(ctx, 0, "a"); err != nil {
-		slog.Error("Failed to submit task", "id", id, "error", err)
+		t.Fatalf("Failed to submit task %d: %v", id, err)
 	}
 
 	// Automatically assigned ID 2
 	if id, err := submit(ctx, 0, "a"); err != nil {
-		slog.Error("Failed to submit task", "id", id, "error", err)
+		t.Fatalf("Failed to submit task %d: %v", id, err)
 	}
 
 	// Already assigned, this will fail
-	if id, err := submit(ctx, 1, "b"); err != nil {
-		slog.Error("Failed to submit task", "id", id, "error", err)
+	if id, err := submit(ctx, 1, "b"); err == nil {
+		t.Fatalf("Expected error for task %d", id)
 	}
 
 	<-ctx.Done()

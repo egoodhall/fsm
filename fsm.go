@@ -29,10 +29,11 @@ const (
 
 // New creates a new state machine
 // The name is used to identify the state machine in the database.
-func New[IN any, OUT any](name string) InitialStateBuilder[IN, OUT] {
+func New[IN any, OUT any](name string, store Store) InitialStateBuilder[IN, OUT] {
 	return &fsm[IN, OUT]{
-		name: name,
-		rest: make(map[State]NthTransition[IN, OUT]),
+		name:  name,
+		rest:  make(map[State]NthTransition[IN, OUT]),
+		store: store,
 	}
 }
 
@@ -65,8 +66,8 @@ type fsm[IN any, OUT any] struct {
 	// Configurable fields
 	name         string
 	logger       *slog.Logger
-	db           sqlc.Querier
-	onTransition OnTransitionFunc
+	store        Store
+	onTransition TransitionListener
 
 	// State machine states
 	first FirstTransition[IN, OUT]
@@ -115,9 +116,9 @@ func (f *fsm[IN, OUT]) submit(ctx context.Context, id int64, event IN) (int64, e
 	var task sqlc.Task
 	var err error
 	if id == 0 {
-		task, err = f.db.CreateTask(ctx, f.id, buf.Bytes())
+		task, err = f.store.Q().CreateTask(ctx, f.id, buf.Bytes())
 	} else {
-		task, err = f.db.CreateTaskWithID(ctx, f.id, id, buf.Bytes())
+		task, err = f.store.Q().CreateTaskWithID(ctx, f.id, id, buf.Bytes())
 	}
 
 	if err != nil {
@@ -141,13 +142,13 @@ func (f *fsm[IN, OUT]) process(ctx context.Context) {
 func (f *fsm[IN, OUT]) resumeTasks(ctx context.Context) error {
 	f.logger.Info("Resuming tasks")
 
-	rows, err := f.db.ListTasks(ctx)
+	rows, err := f.store.Q().ListTasks(ctx)
 	if err != nil {
 		return err
 	}
 
 	for _, row := range rows {
-		state, err := f.db.GetTaskState(ctx, row.ID)
+		state, err := f.store.Q().GetTaskState(ctx, row.ID)
 		if errors.Is(err, sql.ErrNoRows) {
 			state = "__initial__"
 		} else if err != nil {
@@ -173,7 +174,7 @@ func (f *fsm[IN, OUT]) enqueue(task sqlc.Task) {
 }
 
 func (f *fsm[IN, OUT]) transition(ctx context.Context, task sqlc.Task) error {
-	transition, err := f.db.GetLastValidTransition(ctx, task.ID)
+	transition, err := f.store.Q().GetLastValidTransition(ctx, task.ID)
 	if errors.Is(err, sql.ErrNoRows) {
 		transition = sqlc.StateTransition{ToState: "__initial__"}
 	} else if err != nil {
@@ -221,7 +222,7 @@ func (f *fsm[IN, OUT]) transition(ctx context.Context, task sqlc.Task) error {
 
 func (f *fsm[IN, OUT]) commitTransition(ctx context.Context, task sqlc.Task, transition sqlc.StateTransition, out Output) error {
 	f.logger.Info("Transitioning task", "id", task.ID, "from", transition.ToState, "to", out.NextState())
-	if err := f.db.RecordTransition(ctx, task.ID, transition.ToState, string(out.NextState()), out.Data()); err != nil {
+	if err := f.store.Q().RecordTransition(ctx, task.ID, transition.ToState, string(out.NextState()), out.Data()); err != nil {
 		return fmt.Errorf("record transition: %w", err)
 	}
 

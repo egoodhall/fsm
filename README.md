@@ -4,4 +4,4 @@ A Go library for building persistent, type-safe finite state machines. It provid
 
 ## Example
 
-See `example/main.go`
+See `fsm_test.go`

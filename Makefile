@@ -1,7 +1,7 @@
 .PHONY: generate migration
 
-example: generate
-	go run example/main.go
+test: generate
+	go test ./...
 
 clean:
 	rm -f fsm.db
