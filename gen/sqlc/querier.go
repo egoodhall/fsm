@@ -16,7 +16,7 @@ type Querier interface {
 	GetLastValidTransition(ctx context.Context, taskID int64) (StateTransition, error)
 	GetStateMachine(ctx context.Context, id int64) (StateMachine, error)
 	GetTaskState(ctx context.Context, taskID int64) (string, error)
-	ListTasks(ctx context.Context) ([]Task, error)
+	ListTasks(ctx context.Context, fsmID int64) ([]Task, error)
 	RecordTransition(ctx context.Context, taskID int64, fromState string, toState string, output []byte) error
 }
 

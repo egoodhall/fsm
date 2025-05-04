@@ -10,4 +10,5 @@ RETURNING *;
 
 -- name: ListTasks :many
 SELECT * FROM tasks
+WHERE fsm_id = ?
 ORDER BY id ASC;

@@ -142,7 +142,7 @@ func (f *fsm[IN, OUT]) process(ctx context.Context) {
 func (f *fsm[IN, OUT]) resumeTasks(ctx context.Context) error {
 	f.logger.Info("Resuming tasks")
 
-	rows, err := f.store.Q().ListTasks(ctx)
+	rows, err := f.store.Q().ListTasks(ctx, f.id)
 	if err != nil {
 		return err
 	}

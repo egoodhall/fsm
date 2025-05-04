@@ -47,11 +47,12 @@ func (q *Queries) CreateTaskWithID(ctx context.Context, fsmID int64, iD int64, e
 
 const listTasks = `-- name: ListTasks :many
 SELECT id, event, fsm_id, created_at FROM tasks
+WHERE fsm_id = ?
 ORDER BY id ASC
 `
 
-func (q *Queries) ListTasks(ctx context.Context) ([]Task, error) {
-	rows, err := q.db.QueryContext(ctx, listTasks)
+func (q *Queries) ListTasks(ctx context.Context, fsmID int64) ([]Task, error) {
+	rows, err := q.db.QueryContext(ctx, listTasks, fsmID)
 	if err != nil {
 		return nil, err
 	}

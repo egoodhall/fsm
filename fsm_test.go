@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"testing"
+	"time"
 
 	"github.com/egoodhall/fsm"
 )
@@ -73,5 +74,8 @@ func TestFSM(t *testing.T) {
 		t.Fatalf("Expected error for task %d", id)
 	}
 
-	<-ctx.Done()
+	select {
+	case <-ctx.Done():
+	case <-time.After(1 * time.Second):
+	}
 }
