@@ -1,0 +1,31 @@
+name: CreateWorkspace
+states:
+- 
+  name: CreateRequested
+  inputs:
+  - WorkspaceContext
+  transitions:
+  - CreatingRecord
+  - Error
+- 
+  name: CreatingRecord
+  inputs:
+  - WorkspaceContext
+  transitions:
+  - CloningRepository
+  - Error
+- 
+  name: CloningRepository
+  inputs:
+  - WorkspaceContext
+  - WorkspaceID
+  transitions:
+  - Done
+  - Error
+- 
+  name: Done
+  terminal: true
+- 
+  name: Error 
+  terminal: true
+
