@@ -2,11 +2,12 @@ package main
 
 import (
 	"context"
+	"log"
 
 	"github.com/egoodhall/fsm"
 )
 
-//go:generate go run ../cmd/fsmgen -out generated -pkg generated create_workspace.yaml
+//go:generate go run ../cmd/fsmgen -out . -pkg main create_workspace.yaml
 
 type WorkspaceContext struct {
 	RepositoryURL string
@@ -14,14 +15,14 @@ type WorkspaceContext struct {
 }
 
 func main() {
-	fsm := generated.NewCreateWorkspaceFSM().
-		InitialState(func(ctx context.Context, transitions generated.InitialTransitions, i WorkspaceContext) (fsm.Transition, error) {
+	fsm := NewCreateWorkspaceFSM().
+		InitialState(func(ctx context.Context, transitions InitialTransitions, i WorkspaceContext) (fsm.Transition, error) {
 			return nil, nil
 		}).
-		CreatingRecordState(func(ctx context.Context, transitions generated.CreatingRecordTransitions, i WorkspaceContext) (fsm.Transition, error) {
+		CreatingRecordState(func(ctx context.Context, transitions CreatingRecordTransitions, i WorkspaceContext) (fsm.Transition, error) {
 			return nil, nil
 		}).
-		CloningRepositoryState(func(ctx context.Context, transitions generated.CloningRepositoryTransitions, i WorkspaceContext) (fsm.Transition, error) {
+		CloningRepositoryState(func(ctx context.Context, transitions CloningRepositoryTransitions, i WorkspaceContext) (fsm.Transition, error) {
 			return nil, nil
 		}).
 		DoneState(func(ctx context.Context, i WorkspaceContext) (fsm.Transition, error) {
@@ -33,4 +34,9 @@ func main() {
 		Build()
 
 	id, err := fsm.SubmitInitial(context.Background(), WorkspaceContext{})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	log.Println(id)
 }
