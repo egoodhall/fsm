@@ -1,4 +1,4 @@
-.PHONY: generate migration
+.PHONY: generate migration grammar
 
 test: generate
 	go test ./...

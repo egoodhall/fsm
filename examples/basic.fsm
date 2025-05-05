@@ -1,0 +1,20 @@
+type MyInput;
+type ContextA;
+type ContextB;
+
+// BasicFSM demonstrates a simple FSM with multiple states and transitions
+fsm BasicFSM[MyInput] {
+  // Define states with optional contexts
+  start Init;
+  state Processing[ContextA];
+  state Validating[ContextB];
+  state Waiting;
+  end Complete;
+  end Error;
+
+  // Define transitions between states
+  transition Init to Processing or Error;
+  transition Processing to Validating or Error;
+  transition Validating to Waiting or Complete or Error;
+  transition Waiting to Processing or Complete or Error;
+} 
