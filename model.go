@@ -6,27 +6,27 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-type Model struct {
-	Name   string  `yaml:"name"`
-	States []State `yaml:"states"`
+type FSMSchema struct {
+	Name   string        `yaml:"name"`
+	States []StateSchema `yaml:"states"`
 }
 
-type State struct {
+type StateSchema struct {
 	Name        string   `yaml:"name"`
 	Terminal    bool     `yaml:"terminal"`
 	Inputs      []string `yaml:"inputs"`
 	Transitions []string `yaml:"transitions"`
 }
 
-func ParseModel(p []byte) (*Model, error) {
-	var model Model
+func ParseModel(p []byte) (*FSMSchema, error) {
+	var model FSMSchema
 	if err := yaml.Unmarshal(p, &model); err != nil {
 		return nil, err
 	}
 	return &model, nil
 }
 
-func ValidateModel(model *Model) error {
+func ValidateModel(model *FSMSchema) error {
 	if model.Name == "" {
 		return errors.New("name is required")
 	}

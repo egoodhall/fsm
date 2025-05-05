@@ -1,4 +1,4 @@
-package fsmgen
+package main
 
 import (
 	"fmt"
@@ -25,7 +25,7 @@ func main() {
 		log.Fatalf("parse model: %s", err)
 	}
 
-	code, err := fsm.Generate(model)
+	code, err := fsm.Generate(opts.Pkg, model)
 	if err != nil {
 		log.Fatalf("generate code: %s", err)
 	}

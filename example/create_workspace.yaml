@@ -1,7 +1,7 @@
 name: CreateWorkspace
 states:
 - 
-  name: CreateRequested
+  name: Initial
   inputs:
   - WorkspaceContext
   transitions:
@@ -25,7 +25,11 @@ states:
 - 
   name: Done
   terminal: true
+  inputs:
+  - WorkspaceContext
 - 
   name: Error 
   terminal: true
+  inputs:
+  - WorkspaceContext
 
