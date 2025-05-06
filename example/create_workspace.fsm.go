@@ -30,12 +30,12 @@ func NewCreateWorkspaceFSMBuilder() CreateWorkspaceFSMBuilder_CreateRecordStage 
 
 type CreateRecordTransitions interface {
 	ToCloneRepo(context.Context, WorkspaceContext, WorkspaceID) error
-	ToError(context.Context, WorkspaceContext) error
+	ToError(context.Context) error
 }
 
 type CloneRepoTransitions interface {
-	ToDone(context.Context, WorkspaceContext, WorkspaceID) error
-	ToError(context.Context, WorkspaceContext) error
+	ToDone(context.Context) error
+	ToError(context.Context) error
 }
 
 type CreateWorkspaceFSMBuilder_CreateRecordStage interface {
@@ -43,15 +43,15 @@ type CreateWorkspaceFSMBuilder_CreateRecordStage interface {
 }
 
 type CreateWorkspaceFSMBuilder_CloneRepoStage interface {
-	CloneRepoState(func(context.Context, CloneRepoTransitions, WorkspaceContext, WorkspaceID) error) CreateWorkspaceFSMBuilder_DoneStage
+	CloneRepoState(func(context.Context, CloneRepoTransitions, WorkspaceContext, WorkspaceID) error) CreateWorkspaceFSMBuilder__FinalStage
 }
 
 type CreateWorkspaceFSMBuilder_DoneStage interface {
-	DoneState(func(context.Context, WorkspaceContext, WorkspaceID) error) CreateWorkspaceFSMBuilder_ErrorStage
+	DoneState(func(context.Context) error) CreateWorkspaceFSMBuilder__FinalStage
 }
 
 type CreateWorkspaceFSMBuilder_ErrorStage interface {
-	ErrorState(func(context.Context, WorkspaceContext) error) CreateWorkspaceFSMBuilder__FinalStage
+	ErrorState(func(context.Context) error) CreateWorkspaceFSMBuilder__FinalStage
 }
 
 type CreateWorkspaceFSMBuilder__FinalStage interface {
@@ -63,8 +63,6 @@ var _ CreateWorkspaceFSM = new(createWorkspaceFSM)
 var _ fsm.SupportsOptions = new(createWorkspaceFSM)
 var _ CreateWorkspaceFSMBuilder_CreateRecordStage = new(createWorkspaceFSM)
 var _ CreateWorkspaceFSMBuilder_CloneRepoStage = new(createWorkspaceFSM)
-var _ CreateWorkspaceFSMBuilder_DoneStage = new(createWorkspaceFSM)
-var _ CreateWorkspaceFSMBuilder_ErrorStage = new(createWorkspaceFSM)
 var _ CreateWorkspaceFSMBuilder__FinalStage = new(createWorkspaceFSM)
 var _ CreateRecordTransitions = new(createWorkspaceFSM)
 var _ CloneRepoTransitions = new(createWorkspaceFSM)
@@ -83,13 +81,10 @@ type cloneRepoParams struct {
 
 type doneParams struct {
 	ID fsm.TaskID
-	P0 WorkspaceContext
-	P1 WorkspaceID
 }
 
 type errorParams struct {
 	ID fsm.TaskID
-	P0 WorkspaceContext
 }
 
 type createWorkspaceFSM struct {
@@ -104,8 +99,6 @@ type createWorkspaceFSM struct {
 	// FSM state transitions
 	createRecordState func(context.Context, CreateRecordTransitions, WorkspaceContext) error
 	cloneRepoState    func(context.Context, CloneRepoTransitions, WorkspaceContext, WorkspaceID) error
-	doneState         func(context.Context, WorkspaceContext, WorkspaceID) error
-	errorState        func(context.Context, WorkspaceContext) error
 
 	// FSM queues
 	createRecordQueue chan createRecordParams
@@ -122,21 +115,9 @@ func (f *createWorkspaceFSM) CreateRecordState(fn func(context.Context, CreateRe
 	return f
 }
 
-func (f *createWorkspaceFSM) CloneRepoState(fn func(context.Context, CloneRepoTransitions, WorkspaceContext, WorkspaceID) error) CreateWorkspaceFSMBuilder_DoneStage {
+func (f *createWorkspaceFSM) CloneRepoState(fn func(context.Context, CloneRepoTransitions, WorkspaceContext, WorkspaceID) error) CreateWorkspaceFSMBuilder__FinalStage {
 	f.cloneRepoQueue = make(chan cloneRepoParams, 100)
 	f.cloneRepoState = fn
-	return f
-}
-
-func (f *createWorkspaceFSM) DoneState(fn func(context.Context, WorkspaceContext, WorkspaceID) error) CreateWorkspaceFSMBuilder_ErrorStage {
-	f.doneQueue = make(chan doneParams, 100)
-	f.doneState = fn
-	return f
-}
-
-func (f *createWorkspaceFSM) ErrorState(fn func(context.Context, WorkspaceContext) error) CreateWorkspaceFSMBuilder__FinalStage {
-	f.errorQueue = make(chan errorParams, 100)
-	f.errorState = fn
 	return f
 }
 
@@ -303,9 +284,9 @@ func (f *createWorkspaceFSM) ToCloneRepo(ctx context.Context, P0 WorkspaceContex
 	}
 }
 
-func (f *createWorkspaceFSM) ToDone(ctx context.Context, P0 WorkspaceContext, P1 WorkspaceID) error {
+func (f *createWorkspaceFSM) ToDone(ctx context.Context) error {
 	id := fsm.GetTaskID(ctx)
-	msg := doneParams{ID: id, P0: P0, P1: P1}
+	msg := doneParams{ID: id}
 
 	buf := new(bytes.Buffer)
 	if err := gob.NewEncoder(buf).Encode(msg); err != nil {
@@ -329,9 +310,9 @@ func (f *createWorkspaceFSM) ToDone(ctx context.Context, P0 WorkspaceContext, P1
 	}
 }
 
-func (f *createWorkspaceFSM) ToError(ctx context.Context, P0 WorkspaceContext) error {
+func (f *createWorkspaceFSM) ToError(ctx context.Context) error {
 	id := fsm.GetTaskID(ctx)
-	msg := errorParams{ID: id, P0: P0}
+	msg := errorParams{ID: id}
 
 	buf := new(bytes.Buffer)
 	if err := gob.NewEncoder(buf).Encode(msg); err != nil {
@@ -372,14 +353,14 @@ func (f *createWorkspaceFSM) cloneRepoProcessor() {
 func (f *createWorkspaceFSM) doneProcessor() {
 	ctx := fsm.PutState(f.ctx, fsm.State(CreateWorkspaceStateDone))
 	for msg := range f.doneQueue {
-		f.doneState(fsm.PutTaskID(ctx, msg.ID), msg.P0, msg.P1)
+		f.onCompletion(ctx, msg.ID, fsm.State(CreateWorkspaceStateDone))
 	}
 }
 
 func (f *createWorkspaceFSM) errorProcessor() {
 	ctx := fsm.PutState(f.ctx, fsm.State(CreateWorkspaceStateError))
 	for msg := range f.errorQueue {
-		f.errorState(fsm.PutTaskID(ctx, msg.ID), msg.P0)
+		f.onCompletion(ctx, msg.ID, fsm.State(CreateWorkspaceStateError))
 	}
 }
 

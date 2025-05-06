@@ -14,6 +14,8 @@ import (
 	"github.com/pressly/goose/v3"
 )
 
+//go:generate go run github.com/sqlc-dev/sqlc/cmd/sqlc@latest generate
+
 type Q interface {
 	sqlc.Querier
 }

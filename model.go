@@ -129,13 +129,16 @@ func validateModel(model *FsmModel) error {
 	if model.Name == "" {
 		return errors.New("name is required")
 	}
-	var entrypoints int
+	var entrypoints, terminals int
 	for _, state := range model.States {
 		if state.Name == "" {
 			return errors.New("state name is required")
 		}
 		if state.Terminal && len(state.Transitions) > 0 {
 			return errors.New("terminal state cannot have transitions")
+		}
+		if state.Terminal && len(state.Inputs) > 0 {
+			return errors.New("terminal state cannot have inputs")
 		}
 		if state.Workers == 0 {
 			state.Workers = 1
@@ -146,9 +149,15 @@ func validateModel(model *FsmModel) error {
 		if state.Entrypoint {
 			entrypoints++
 		}
+		if state.Terminal {
+			terminals++
+		}
 	}
 	if entrypoints != 1 {
 		return errors.New("exactly one entrypoint is required")
+	}
+	if terminals < 1 {
+		return errors.New("at least one terminal state is required")
 	}
 	return nil
 }

@@ -19,7 +19,9 @@ func Generate(pkg string, model *FsmModel) *jen.File {
 	file.Var().Id("_").Id(model.FsmName()).Op("=").New(jen.Id(model.FsmInternalName()))
 	file.Var().Id("_").Qual("github.com/egoodhall/fsm", "SupportsOptions").Op("=").New(jen.Id(model.FsmInternalName()))
 	for _, state := range model.States {
-		file.Var().Id("_").Id(model.FsmBuilderStageName(state)).Op("=").New(jen.Id(model.FsmInternalName()))
+		if !state.Terminal {
+			file.Var().Id("_").Id(model.FsmBuilderStageName(state)).Op("=").New(jen.Id(model.FsmInternalName()))
+		}
 	}
 	file.Var().Id("_").Id(model.FsmBuilderFinalStageName()).Op("=").New(jen.Id(model.FsmInternalName()))
 	for _, state := range model.States {
@@ -90,10 +92,10 @@ func generatePublicInterfaces(model *FsmModel) []jen.Code {
 		method := jen.Id(model.FsmBuilderStageMethodName(state)).Params(
 			generateFSMStateMethodSignature(model, state),
 		)
-		if i == len(model.States)-1 {
-			method = method.Id(model.FsmBuilderFinalStageName())
+		if next, ok := nextNonTerminalState(model.States[i+1:]); ok {
+			method = method.Id(model.FsmBuilderStageName(next))
 		} else {
-			method = method.Id(model.FsmBuilderStageName(model.States[i+1]))
+			method = method.Id(model.FsmBuilderFinalStageName())
 		}
 
 		code = append(code, jen.Type().Id(model.FsmBuilderStageName(state)).Interface(method).Line())
@@ -105,6 +107,16 @@ func generatePublicInterfaces(model *FsmModel) []jen.Code {
 	))
 
 	return code
+}
+
+func nextNonTerminalState(states []StateModel) (StateModel, bool) {
+	for _, state := range states {
+		if state.Terminal {
+			continue
+		}
+		return state, true
+	}
+	return StateModel{}, false
 }
 
 func generateFSMImplementation(model *FsmModel) []jen.Code {
@@ -132,6 +144,9 @@ func generateFSMImplementation(model *FsmModel) []jen.Code {
 			g.Line()
 			g.Comment("FSM state transitions")
 			for _, state := range model.States {
+				if state.Terminal {
+					continue
+				}
 				g.Id(model.FsmStateInternalName(state)).Add(generateFSMStateMethodSignature(model, state))
 			}
 			g.Line()
@@ -145,16 +160,21 @@ func generateFSMImplementation(model *FsmModel) []jen.Code {
 
 	// FSM builder stage methods
 	for i, state := range model.States {
+		if state.Terminal {
+			// No transitions from terminal states
+			continue
+		}
+
 		method := jen.Func().
 			Params(jen.Id("f").Op("*").Id(model.FsmInternalName())).
 			Id(model.FsmBuilderStageMethodName(state)).Params(
 			jen.Id("fn").Add(generateFSMStateMethodSignature(model, state)),
 		)
 
-		if i == len(model.States)-1 {
-			method = method.Id(model.FsmBuilderFinalStageName())
+		if next, ok := nextNonTerminalState(model.States[i+1:]); ok {
+			method = method.Id(model.FsmBuilderStageName(next))
 		} else {
-			method = method.Id(model.FsmBuilderStageName(model.States[i+1]))
+			method = method.Id(model.FsmBuilderFinalStageName())
 		}
 
 		code = append(code,
@@ -356,17 +376,21 @@ func generateFSMImplementation(model *FsmModel) []jen.Code {
 				Params().
 				Block(
 					jen.Id("ctx").Op(":=").Qual("github.com/egoodhall/fsm", "PutState").Call(jen.Id("f").Dot("ctx"), jen.Qual("github.com/egoodhall/fsm", "State").Call(jen.Id(model.StateName(state)))),
-					jen.For(jen.Id("msg").Op(":=").Range().Id("f").Dot(model.FsmStateQueueInternalName(state))).Block(
-						jen.Id("f").Dot(model.FsmStateInternalName(state)).CallFunc(func(g *jen.Group) {
-							g.Qual("github.com/egoodhall/fsm", "PutTaskID").Call(jen.Id("ctx"), jen.Id("msg").Dot("ID"))
-							if !state.Terminal {
-								g.Id("f")
-							}
-							for i := range state.Inputs {
-								g.Id("msg").Dot(fmt.Sprintf("P%d", i))
-							}
-						}),
-					),
+					jen.For(jen.Id("msg").Op(":=").Range().Id("f").Dot(model.FsmStateQueueInternalName(state))).BlockFunc(func(g *jen.Group) {
+						if state.Terminal {
+							g.Id("f").Dot("onCompletion").Call(jen.Id("ctx"), jen.Id("msg").Dot("ID"), jen.Qual("github.com/egoodhall/fsm", "State").Call(jen.Id(model.StateName(state))))
+						} else {
+							g.Id("f").Dot(model.FsmStateInternalName(state)).CallFunc(func(g *jen.Group) {
+								g.Qual("github.com/egoodhall/fsm", "PutTaskID").Call(jen.Id("ctx"), jen.Id("msg").Dot("ID"))
+								if !state.Terminal {
+									g.Id("f")
+								}
+								for i := range state.Inputs {
+									g.Id("msg").Dot(fmt.Sprintf("P%d", i))
+								}
+							})
+						}
+					}),
 				),
 		)
 	}

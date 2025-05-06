@@ -5,8 +5,8 @@ import (
 	"log/slog"
 )
 
-type TransitionListener func(id TaskID, from State, to State, inputs ...any)
-type CompletionListener func(id TaskID, state State)
+type TransitionListener func(ctx context.Context, id TaskID, from State, to State, inputs ...any)
+type CompletionListener func(ctx context.Context, id TaskID, state State)
 
 type SupportsOptions interface {
 	WithContext(update func(ctx context.Context) context.Context)

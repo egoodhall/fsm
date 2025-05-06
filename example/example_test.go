@@ -17,16 +17,15 @@ func TestMultistepFSM(t *testing.T) {
 			return transitions.ToCloneRepo(ctx, c, example.WorkspaceID(1))
 		}).
 		CloneRepoState(func(ctx context.Context, transitions example.CloneRepoTransitions, c example.WorkspaceContext, i example.WorkspaceID) error {
-			return transitions.ToDone(ctx, c, i)
+			return transitions.ToDone(ctx)
 		}).
-		DoneState(func(ctx context.Context, c example.WorkspaceContext, i example.WorkspaceID) error {
-			completed++
-			return nil
-		}).
-		ErrorState(func(ctx context.Context, c example.WorkspaceContext) error {
-			return nil
-		}).
-		BuildAndStart(t.Context(), fsm.WithLogger(slog.Default()), fsm.InMemory())
+		BuildAndStart(t.Context(),
+			fsm.WithLogger(slog.Default()),
+			fsm.InMemory(),
+			fsm.WithCompletionListener(func(ctx context.Context, id fsm.TaskID, state fsm.State) {
+				completed++
+			}),
+		)
 	if err != nil {
 		t.Fatal(err)
 	}

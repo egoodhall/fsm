@@ -1,6 +1,6 @@
 name: CreateWorkspace
 states:
-- 
+-
   name: CreateRecord
   entrypoint: true
   inputs:
@@ -8,7 +8,7 @@ states:
   transitions:
   - CloneRepo
   - Error
-- 
+-
   name: CloneRepo
   workers: 5
   inputs:
@@ -17,15 +17,10 @@ states:
   transitions:
   - Done
   - Error
-- 
+-
   name: Done
   terminal: true
-  inputs:
-  - WorkspaceContext
-  - WorkspaceID
-- 
+-
   name: Error
   terminal: true
-  inputs:
-  - WorkspaceContext
 
