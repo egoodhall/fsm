@@ -1,4 +1,4 @@
-package main
+package example
 
 import (
 	"bytes"
@@ -163,9 +163,16 @@ func (f *createWorkspaceFSM) BuildAndStart(ctx context.Context, opts ...fsm.Opti
 	}
 
 	// Start FSM processors
+	// Start 1 createRecordProcessor processors
 	go f.createRecordProcessor()
+	// Start 5 cloneRepoProcessor processors
+	for i := 0; i < 5; i++ {
+		go f.cloneRepoProcessor()
+	}
 	go f.cloneRepoProcessor()
+	// Start 1 doneProcessor processors
 	go f.doneProcessor()
+	// Start 1 errorProcessor processors
 	go f.errorProcessor()
 
 	return f, nil
