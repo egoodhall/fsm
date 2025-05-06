@@ -32,8 +32,8 @@ func main() {
 		log.Fatalf("mkdir: %s", err)
 	}
 
-	out := fmt.Sprintf("%s.fsm.go", strings.TrimSuffix(input, filepath.Ext(input)))
-	file, err := os.OpenFile(filepath.Join(opts.Out, out), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0640)
+	out := filepath.Join(opts.Out, buildOutfileName(input))
+	file, err := os.OpenFile(out, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0640)
 	if err != nil {
 		log.Fatalf("open file: %s", err)
 	}
@@ -42,4 +42,11 @@ func main() {
 	if err := generated.Render(file); err != nil {
 		log.Fatalf("render file: %s", err)
 	}
+}
+
+func buildOutfileName(name string) string {
+	file := filepath.Base(name)
+	ext := filepath.Ext(file)
+	fname := strings.TrimSuffix(file, ext)
+	return fmt.Sprintf("%s.fsm.go", fname)
 }
