@@ -10,49 +10,38 @@ import (
 )
 
 const createTask = `-- name: CreateTask :one
-INSERT INTO tasks (fsm_id, event)
-VALUES (?, ?)
-RETURNING id, event, fsm_id, created_at
+INSERT INTO tasks (event)
+VALUES (?)
+RETURNING id, event, created_at
 `
 
-func (q *Queries) CreateTask(ctx context.Context, fsmID int64, event []byte) (Task, error) {
-	row := q.db.QueryRowContext(ctx, createTask, fsmID, event)
+func (q *Queries) CreateTask(ctx context.Context, event []byte) (Task, error) {
+	row := q.db.QueryRowContext(ctx, createTask, event)
 	var i Task
-	err := row.Scan(
-		&i.ID,
-		&i.Event,
-		&i.FsmID,
-		&i.CreatedAt,
-	)
+	err := row.Scan(&i.ID, &i.Event, &i.CreatedAt)
 	return i, err
 }
 
 const createTaskWithID = `-- name: CreateTaskWithID :one
-INSERT INTO tasks (fsm_id, id, event)
-VALUES (?, ?, ?)
-RETURNING id, event, fsm_id, created_at
+INSERT INTO tasks (id, event)
+VALUES (?, ?)
+RETURNING id, event, created_at
 `
 
-func (q *Queries) CreateTaskWithID(ctx context.Context, fsmID int64, iD int64, event []byte) (Task, error) {
-	row := q.db.QueryRowContext(ctx, createTaskWithID, fsmID, iD, event)
+func (q *Queries) CreateTaskWithID(ctx context.Context, iD int64, event []byte) (Task, error) {
+	row := q.db.QueryRowContext(ctx, createTaskWithID, iD, event)
 	var i Task
-	err := row.Scan(
-		&i.ID,
-		&i.Event,
-		&i.FsmID,
-		&i.CreatedAt,
-	)
+	err := row.Scan(&i.ID, &i.Event, &i.CreatedAt)
 	return i, err
 }
 
 const listTasks = `-- name: ListTasks :many
-SELECT id, event, fsm_id, created_at FROM tasks
-WHERE fsm_id = ?
+SELECT id, event, created_at FROM tasks
 ORDER BY id ASC
 `
 
-func (q *Queries) ListTasks(ctx context.Context, fsmID int64) ([]Task, error) {
-	rows, err := q.db.QueryContext(ctx, listTasks, fsmID)
+func (q *Queries) ListTasks(ctx context.Context) ([]Task, error) {
+	rows, err := q.db.QueryContext(ctx, listTasks)
 	if err != nil {
 		return nil, err
 	}
@@ -60,12 +49,7 @@ func (q *Queries) ListTasks(ctx context.Context, fsmID int64) ([]Task, error) {
 	var items []Task
 	for rows.Next() {
 		var i Task
-		if err := rows.Scan(
-			&i.ID,
-			&i.Event,
-			&i.FsmID,
-			&i.CreatedAt,
-		); err != nil {
+		if err := rows.Scan(&i.ID, &i.Event, &i.CreatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

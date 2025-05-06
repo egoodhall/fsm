@@ -5,12 +5,13 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/egoodhall/fsm"
 )
 
 func main() {
-	input, opts, err := fsm.ParseOptions()
+	input, opts, err := fsm.ParseFlags()
 	if err != nil {
 		log.Fatalf("parse options: %s", err)
 	}
@@ -25,16 +26,20 @@ func main() {
 		log.Fatalf("parse model: %s", err)
 	}
 
-	code, err := fsm.Generate(opts.Pkg, model)
-	if err != nil {
-		log.Fatalf("generate code: %s", err)
-	}
+	generated := fsm.Generate(opts.Pkg, model)
 
 	if err := os.MkdirAll(opts.Out, 0755); err != nil {
 		log.Fatalf("mkdir: %s", err)
 	}
 
-	if err := os.WriteFile(filepath.Join(opts.Out, fmt.Sprintf("%s.fsm.go", model.Name)), code, 0644); err != nil {
-		log.Fatalf("write file: %s", err)
+	out := fmt.Sprintf("%s.fsm.go", strings.TrimSuffix(input, filepath.Ext(input)))
+	file, err := os.OpenFile(filepath.Join(opts.Out, out), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0640)
+	if err != nil {
+		log.Fatalf("open file: %s", err)
+	}
+	defer file.Close()
+
+	if err := generated.Render(file); err != nil {
+		log.Fatalf("render file: %s", err)
 	}
 }

@@ -4,12 +4,6 @@
 
 package sqlc
 
-type StateMachine struct {
-	ID        int64
-	Name      string
-	CreatedAt int64
-}
-
 type StateTransition struct {
 	ID        int64
 	TaskID    int64
@@ -22,6 +16,5 @@ type StateTransition struct {
 type Task struct {
 	ID        int64
 	Event     []byte
-	FsmID     int64
 	CreatedAt int64
 }

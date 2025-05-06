@@ -1,25 +1,36 @@
 package fsm
 
-import (
-	"errors"
-	"flag"
-)
+import "log/slog"
 
-type Options struct {
-	Out string
-	Pkg string
+type TransitionListener func(id TaskID, from State, to State, inputs ...any)
+type CompletionListener func(id TaskID, state State)
+
+type SupportsOptions interface {
+	WithStore(store Store)
+	WithLogger(logger *slog.Logger)
+	WithTransitionListener(listener TransitionListener)
+	WithCompletionListener(listener CompletionListener)
 }
 
-func ParseOptions() (input string, opts Options, err error) {
-	flag.StringVar(&opts.Out, "out", "", "output directory")
-	flag.StringVar(&opts.Pkg, "pkg", "", "package name")
-	flag.Parse()
+type Option func(SupportsOptions) error
 
-	if opts.Out == "" {
-		return "", opts, errors.New("output directory is required")
-	} else if opts.Pkg == "" {
-		return "", opts, errors.New("package name is required")
+func WithLogger(logger *slog.Logger) Option {
+	return func(s SupportsOptions) error {
+		s.WithLogger(logger)
+		return nil
 	}
+}
 
-	return flag.Arg(0), opts, nil
+func WithTransitionListener(listener TransitionListener) Option {
+	return func(s SupportsOptions) error {
+		s.WithTransitionListener(listener)
+		return nil
+	}
+}
+
+func WithCompletionListener(listener CompletionListener) Option {
+	return func(s SupportsOptions) error {
+		s.WithCompletionListener(listener)
+		return nil
+	}
 }

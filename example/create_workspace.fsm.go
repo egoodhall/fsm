@@ -1,56 +1,348 @@
 package main
 
 import (
+	"bytes"
 	"context"
-
-	"github.com/egoodhall/fsm"
+	"encoding/gob"
+	"errors"
+	fsm "github.com/egoodhall/fsm"
+	"log/slog"
+	"sync"
 )
 
-// Exported interfaces
+type CreateWorkspaceState fsm.State
+
+const (
+	CreateWorkspaceStateCreateRecord CreateWorkspaceState = "CreateRecord"
+	CreateWorkspaceStateCloneRepo    CreateWorkspaceState = "CloneRepo"
+	CreateWorkspaceStateDone         CreateWorkspaceState = "Done"
+	CreateWorkspaceStateError        CreateWorkspaceState = "Error"
+)
 
 type CreateWorkspaceFSM interface {
-	SubmitInitial(ctx context.Context, i WorkspaceContext) (fsm.TaskID, error)
+	fsm.SupportsOptions
+	Submit(ctx context.Context, WorkspaceContext WorkspaceContext) (fsm.TaskID, error)
 }
 
-type CreateWorkspaceFSMBuilder_InitialStage interface {
-	InitialState(func(ctx context.Context, transitions InitialTransitions, i WorkspaceContext) (fsm.Transition, error)) CreateWorkspaceFSMBuilder_CreatingRecordStage
+func NewCreateWorkspaceFSMBuilder() CreateWorkspaceFSMBuilder_CreateRecordStage {
+	return new(createWorkspaceFSM)
 }
 
-type CreateWorkspaceFSMBuilder_CreatingRecordStage interface {
-	CreatingRecordState(func(ctx context.Context, transitions CreatingRecordTransitions, i WorkspaceContext) (fsm.Transition, error)) CreateWorkspaceFSMBuilder_CloningRepositoryStage
+type CreateRecordTransitions interface {
+	ToCloneRepo(context.Context, WorkspaceContext, WorkspaceID) error
+	ToError(context.Context, WorkspaceContext) error
 }
 
-type CreateWorkspaceFSMBuilder_CloningRepositoryStage interface {
-	CloningRepositoryState(func(ctx context.Context, transitions CloningRepositoryTransitions, i WorkspaceContext) (fsm.Transition, error)) CreateWorkspaceFSMBuilder_DoneStage
+type CloneRepoTransitions interface {
+	ToDone(context.Context, WorkspaceContext, WorkspaceID) error
+	ToError(context.Context, WorkspaceContext) error
+}
+
+type CreateWorkspaceFSMBuilder_CreateRecordStage interface {
+	CreateRecordState(func(context.Context, CreateRecordTransitions, WorkspaceContext) error) CreateWorkspaceFSMBuilder_CloneRepoStage
+}
+
+type CreateWorkspaceFSMBuilder_CloneRepoStage interface {
+	CloneRepoState(func(context.Context, CloneRepoTransitions, WorkspaceContext, WorkspaceID) error) CreateWorkspaceFSMBuilder_DoneStage
 }
 
 type CreateWorkspaceFSMBuilder_DoneStage interface {
-	DoneState(func(ctx context.Context, i WorkspaceContext) (fsm.Transition, error)) CreateWorkspaceFSMBuilder_ErrorStage
+	DoneState(func(context.Context, WorkspaceContext, WorkspaceID) error) CreateWorkspaceFSMBuilder_ErrorStage
 }
 
 type CreateWorkspaceFSMBuilder_ErrorStage interface {
-	ErrorState(func(ctx context.Context, i WorkspaceContext) (fsm.Transition, error)) CreateWorkspaceFSMBuilder_Build
+	ErrorState(func(context.Context, WorkspaceContext) error) CreateWorkspaceFSMBuilder__FinalStage
 }
 
-type CreateWorkspaceFSMBuilder_Build interface {
-	Build() CreateWorkspaceFSM
+type CreateWorkspaceFSMBuilder__FinalStage interface {
+	BuildAndStart(context.Context, ...fsm.Option) (CreateWorkspaceFSM, error)
 }
 
-type InitialTransitions interface {
-	ToCreatingRecord() (fsm.Transition, error)
-	ToError() (fsm.Transition, error)
+// FSM type checks
+var _ CreateWorkspaceFSM = new(createWorkspaceFSM)
+var _ fsm.SupportsOptions = new(createWorkspaceFSM)
+var _ CreateWorkspaceFSMBuilder_CreateRecordStage = new(createWorkspaceFSM)
+var _ CreateWorkspaceFSMBuilder_CloneRepoStage = new(createWorkspaceFSM)
+var _ CreateWorkspaceFSMBuilder_DoneStage = new(createWorkspaceFSM)
+var _ CreateWorkspaceFSMBuilder_ErrorStage = new(createWorkspaceFSM)
+var _ CreateWorkspaceFSMBuilder__FinalStage = new(createWorkspaceFSM)
+var _ CreateRecordTransitions = new(createWorkspaceFSM)
+var _ CloneRepoTransitions = new(createWorkspaceFSM)
+
+// CreateWorkspaceFSM implementation
+type createRecordParams struct {
+	ID fsm.TaskID
+	P0 WorkspaceContext
 }
 
-type CreatingRecordTransitions interface {
-	ToCloningRepository() (fsm.Transition, error)
-	ToError() (fsm.Transition, error)
+type cloneRepoParams struct {
+	ID fsm.TaskID
+	P0 WorkspaceContext
+	P1 WorkspaceID
 }
 
-type CloningRepositoryTransitions interface {
-	ToDone() (fsm.Transition, error)
-	ToError() (fsm.Transition, error)
+type doneParams struct {
+	ID fsm.TaskID
+	P0 WorkspaceContext
+	P1 WorkspaceID
 }
 
-func NewCreateWorkspaceFSM() CreateWorkspaceFSMBuilder_InitialStage {
-	return nil
+type errorParams struct {
+	ID fsm.TaskID
+	P0 WorkspaceContext
+}
+
+type createWorkspaceFSM struct {
+	lock sync.Mutex
+	ctx  context.Context
+
+	// Configuration options
+	store        fsm.Store
+	logger       *slog.Logger
+	onTransition fsm.TransitionListener
+	onCompletion fsm.CompletionListener
+
+	// FSM state transitions
+	createRecordState func(context.Context, CreateRecordTransitions, WorkspaceContext) error
+	cloneRepoState    func(context.Context, CloneRepoTransitions, WorkspaceContext, WorkspaceID) error
+	doneState         func(context.Context, WorkspaceContext, WorkspaceID) error
+	errorState        func(context.Context, WorkspaceContext) error
+
+	// FSM queues
+	createRecordQueue chan createRecordParams
+	cloneRepoQueue    chan cloneRepoParams
+	doneQueue         chan doneParams
+	errorQueue        chan errorParams
+}
+
+// FSM builder methods
+
+func (f *createWorkspaceFSM) CreateRecordState(fn func(context.Context, CreateRecordTransitions, WorkspaceContext) error) CreateWorkspaceFSMBuilder_CloneRepoStage {
+	f.createRecordQueue = make(chan createRecordParams, 100)
+	f.createRecordState = fn
+	return f
+}
+
+func (f *createWorkspaceFSM) CloneRepoState(fn func(context.Context, CloneRepoTransitions, WorkspaceContext, WorkspaceID) error) CreateWorkspaceFSMBuilder_DoneStage {
+	f.cloneRepoQueue = make(chan cloneRepoParams, 100)
+	f.cloneRepoState = fn
+	return f
+}
+
+func (f *createWorkspaceFSM) DoneState(fn func(context.Context, WorkspaceContext, WorkspaceID) error) CreateWorkspaceFSMBuilder_ErrorStage {
+	f.doneQueue = make(chan doneParams, 100)
+	f.doneState = fn
+	return f
+}
+
+func (f *createWorkspaceFSM) ErrorState(fn func(context.Context, WorkspaceContext) error) CreateWorkspaceFSMBuilder__FinalStage {
+	f.errorQueue = make(chan errorParams, 100)
+	f.errorState = fn
+	return f
+}
+
+func (f *createWorkspaceFSM) BuildAndStart(ctx context.Context, opts ...fsm.Option) (CreateWorkspaceFSM, error) {
+	// Check if FSM is already started
+	if !f.lock.TryLock() {
+		return nil, errors.New("FSM already started")
+	}
+
+	// Set context
+	f.ctx = ctx
+
+	// Apply options
+	for _, opt := range opts {
+		if err := opt(f); err != nil {
+			return nil, err
+		}
+	}
+	if f.store == nil {
+		if err := fsm.InMemory()(f); err != nil {
+			return nil, err
+		}
+	}
+
+	// Start FSM processors
+	go f.createRecordProcessor()
+	go f.cloneRepoProcessor()
+	go f.doneProcessor()
+	go f.errorProcessor()
+
+	return f, nil
+}
+
+// FSM options
+
+func (f *createWorkspaceFSM) WithStore(store fsm.Store) {
+	f.store = store
+}
+
+func (f *createWorkspaceFSM) WithLogger(logger *slog.Logger) {
+	f.logger = logger
+}
+
+func (f *createWorkspaceFSM) WithTransitionListener(listener fsm.TransitionListener) {
+	f.onTransition = listener
+}
+
+func (f *createWorkspaceFSM) WithCompletionListener(listener fsm.CompletionListener) {
+	f.onCompletion = listener
+}
+
+// FSM transition methods
+
+func (f *createWorkspaceFSM) ToCreateRecord(ctx context.Context, P0 WorkspaceContext) error {
+	id := fsm.GetTaskID(ctx)
+	msg := createRecordParams{ID: id, P0: P0}
+
+	buf := new(bytes.Buffer)
+	if err := gob.NewEncoder(buf).Encode(msg); err != nil {
+		return err
+	}
+
+	if err := f.store.Q().RecordTransition(
+		ctx,
+		int64(id),
+		string(fsm.GetState(ctx)),
+		string(CreateWorkspaceStateCreateRecord),
+		buf.Bytes()); err != nil {
+		return err
+	}
+
+	select {
+	case f.createRecordQueue <- msg:
+		return nil
+	case <-ctx.Done():
+		return errors.New("task submission cancelled")
+	}
+}
+
+func (f *createWorkspaceFSM) ToCloneRepo(ctx context.Context, P0 WorkspaceContext, P1 WorkspaceID) error {
+	id := fsm.GetTaskID(ctx)
+	msg := cloneRepoParams{ID: id, P0: P0, P1: P1}
+
+	buf := new(bytes.Buffer)
+	if err := gob.NewEncoder(buf).Encode(msg); err != nil {
+		return err
+	}
+
+	if err := f.store.Q().RecordTransition(
+		ctx,
+		int64(id),
+		string(fsm.GetState(ctx)),
+		string(CreateWorkspaceStateCloneRepo),
+		buf.Bytes()); err != nil {
+		return err
+	}
+
+	select {
+	case f.cloneRepoQueue <- msg:
+		return nil
+	case <-ctx.Done():
+		return errors.New("task submission cancelled")
+	}
+}
+
+func (f *createWorkspaceFSM) ToDone(ctx context.Context, P0 WorkspaceContext, P1 WorkspaceID) error {
+	id := fsm.GetTaskID(ctx)
+	msg := doneParams{ID: id, P0: P0, P1: P1}
+
+	buf := new(bytes.Buffer)
+	if err := gob.NewEncoder(buf).Encode(msg); err != nil {
+		return err
+	}
+
+	if err := f.store.Q().RecordTransition(
+		ctx,
+		int64(id),
+		string(fsm.GetState(ctx)),
+		string(CreateWorkspaceStateDone),
+		buf.Bytes()); err != nil {
+		return err
+	}
+
+	select {
+	case f.doneQueue <- msg:
+		return nil
+	case <-ctx.Done():
+		return errors.New("task submission cancelled")
+	}
+}
+
+func (f *createWorkspaceFSM) ToError(ctx context.Context, P0 WorkspaceContext) error {
+	id := fsm.GetTaskID(ctx)
+	msg := errorParams{ID: id, P0: P0}
+
+	buf := new(bytes.Buffer)
+	if err := gob.NewEncoder(buf).Encode(msg); err != nil {
+		return err
+	}
+
+	if err := f.store.Q().RecordTransition(
+		ctx,
+		int64(id),
+		string(fsm.GetState(ctx)),
+		string(CreateWorkspaceStateError),
+		buf.Bytes()); err != nil {
+		return err
+	}
+
+	select {
+	case f.errorQueue <- msg:
+		return nil
+	case <-ctx.Done():
+		return errors.New("task submission cancelled")
+	}
+}
+
+func (f *createWorkspaceFSM) createRecordProcessor() {
+	ctx := fsm.PutState(f.ctx, fsm.State(CreateWorkspaceStateCreateRecord))
+	for msg := range f.createRecordQueue {
+		f.createRecordState(fsm.PutTaskID(ctx, msg.ID), f, msg.P0)
+	}
+}
+
+func (f *createWorkspaceFSM) cloneRepoProcessor() {
+	ctx := fsm.PutState(f.ctx, fsm.State(CreateWorkspaceStateCloneRepo))
+	for msg := range f.cloneRepoQueue {
+		f.cloneRepoState(fsm.PutTaskID(ctx, msg.ID), f, msg.P0, msg.P1)
+	}
+}
+
+func (f *createWorkspaceFSM) doneProcessor() {
+	ctx := fsm.PutState(f.ctx, fsm.State(CreateWorkspaceStateDone))
+	for msg := range f.doneQueue {
+		f.doneState(fsm.PutTaskID(ctx, msg.ID), msg.P0, msg.P1)
+	}
+}
+
+func (f *createWorkspaceFSM) errorProcessor() {
+	ctx := fsm.PutState(f.ctx, fsm.State(CreateWorkspaceStateError))
+	for msg := range f.errorQueue {
+		f.errorState(fsm.PutTaskID(ctx, msg.ID), msg.P0)
+	}
+}
+
+// Submit FSM tasks
+
+func (f *createWorkspaceFSM) Submit(ctx context.Context, P0 WorkspaceContext) (fsm.TaskID, error) {
+	msg := createRecordParams{P0: P0}
+
+	buf := new(bytes.Buffer)
+	if err := gob.NewEncoder(buf).Encode(msg); err != nil {
+		return 0, err
+	}
+
+	task, err := f.store.Q().CreateTask(ctx, buf.Bytes())
+	if err != nil {
+		return 0, err
+	}
+	msg.ID = fsm.TaskID(task.ID)
+
+	select {
+	case f.createRecordQueue <- msg:
+		return msg.ID, nil
+	case <-ctx.Done():
+		return 0, errors.New("task submission cancelled")
+	}
 }
