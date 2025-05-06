@@ -1,109 +1,106 @@
-# FSM - A Go Finite State Machine Generator
+# FSM - Finite State Machine Generator for Go
 
-This project provides a DSL (Domain Specific Language) for defining finite state machines in Go.
+A type-safe finite state machine generator for Go that creates code from YAML definitions.
 
 ## Installation
 
 ```bash
-go get github.com/egoodhall/fsm
+go install github.com/egoodhall/fsm/cmd/fsmgen@latest
 ```
+
+## Features
+
+- Type-safe state machine definitions
+- Parallel processing with configurable worker counts
+- In-memory or persistent state storage
+- Automatic code generation from YAML definitions
 
 ## Usage
 
-### Define your FSM using the DSL
+1. Define your state machine in YAML:
 
-Create a file named `myfsm.fsm` with your FSM definition:
-
+```yaml
+# create_workspace.yaml
+name: CreateWorkspace
+states:
+- 
+  name: CreateRecord
+  entrypoint: true
+  inputs:
+  - WorkspaceContext
+  transitions:
+  - CloneRepo
+  - Error
+- 
+  name: CloneRepo
+  workers: 5
+  inputs:
+  - WorkspaceContext
+  - WorkspaceID
+  transitions:
+  - Done
+  - Error
+- 
+  name: Done
+  terminal: true
+  inputs:
+  - WorkspaceContext
+  - WorkspaceID
+- 
+  name: Error
+  terminal: true
+  inputs:
+  - WorkspaceContext
 ```
-type MyInput;
-type MyOutput;
-type ContextA;
-type ContextB;
 
-// MyStateMachine handles transitions between states
-fsm MyStateMachine[MyInput] {
-  start A;
-  state B[ContextA];
-  state C[ContextB];
-  state D;
-  end END;
-
-  transition A to B or C or END;
-  transition B to D or END;
-  transition C to D;
-  transition D to END;
-}
-```
-
-### Generate Go code from your FSM definition
-
-```bash
-make grammar  # Generate the parser
-go run github.com/egoodhall/fsm/cmd/fsm-gen myfsm.fsm > myfsm.go
-```
-
-### Use the generated code in your application
+2. Define your custom types:
 
 ```go
-package main
+// example.go
+package example
 
-import (
-	"context"
-	"fmt"
-	"log"
+//go:generate go run github.com/egoodhall/fsm/cmd/fsmgen -out . -pkg example create_workspace.yaml
 
-	"github.com/yourmodule/myfsm"
-)
+type WorkspaceID int64
 
-func main() {
-	ctx := context.Background()
-	
-	// Create the FSM
-	machine, err := myfsm.New(ctx)
-	if err != nil {
-		log.Fatalf("Failed to create FSM: %v", err)
-	}
-	
-	// Start processing
-	submit, stop, err := machine.Start(ctx)
-	if err != nil {
-		log.Fatalf("Failed to start FSM: %v", err)
-	}
-	defer stop()
-	
-	// Submit a task
-	id, err := submit(ctx, 0, "some input")
-	if err != nil {
-		log.Fatalf("Failed to submit task: %v", err)
-	}
-	
-	fmt.Printf("Task submitted with ID: %d\n", id)
+type WorkspaceContext struct {
+    RepositoryURL string
+    BranchName    string
 }
 ```
 
-## DSL Syntax
+3. Generate FSM code:
 
-### Type Declarations
-
-```
-type TypeName;
-```
-
-### State Machine Definition
-
-```
-fsm MachineName[InputType] {
-  // State declarations
-  start StateName;
-  state StateName[ContextType];
-  state StateName;
-  end StateName;
-
-  // Transition declarations
-  transition FromState to ToState1 or ToState2 or ToState3;
-}
+```bash
+fsmgen -out ./generated -pkg example create_workspace.yaml
+# or use go:generate
+go generate ./...
 ```
 
-## License
+4. Use the generated FSM:
 
-[MIT License](LICENSE)
+```go
+fsm, err := example.NewCreateWorkspaceFSMBuilder().
+    CreateRecordState(func(ctx context.Context, transitions example.CreateRecordTransitions, c example.WorkspaceContext) error {
+        return transitions.ToCloneRepo(ctx, c, example.WorkspaceID(1))
+    }).
+    CloneRepoState(func(ctx context.Context, transitions example.CloneRepoTransitions, c example.WorkspaceContext, i example.WorkspaceID) error {
+        return transitions.ToDone(ctx, c, i)
+    }).
+    DoneState(func(ctx context.Context, c example.WorkspaceContext, i example.WorkspaceID) error {
+        // Terminal state handler
+        return nil
+    }).
+    ErrorState(func(ctx context.Context, c example.WorkspaceContext) error {
+        // Error state handler
+        return nil
+    }).
+    BuildAndStart(context.Background())
+
+// Submit a task to the FSM
+id, err := fsm.Submit(context.Background(), example.WorkspaceContext{
+    RepositoryURL: "https://github.com/example/repo",
+    BranchName: "main",
+})
+```
+
