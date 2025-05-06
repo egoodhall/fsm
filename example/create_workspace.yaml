@@ -3,7 +3,6 @@ states:
 - 
   name: CreateRecord
   entrypoint: true
-  workers: 1
   inputs:
   - WorkspaceContext
   transitions:
@@ -21,14 +20,12 @@ states:
 - 
   name: Done
   terminal: true
-  workers: 1
   inputs:
   - WorkspaceContext
   - WorkspaceID
 - 
   name: Error
   terminal: true
-  workers: 1
   inputs:
   - WorkspaceContext
 

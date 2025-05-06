@@ -137,7 +137,10 @@ func validateModel(model *FsmModel) error {
 		if state.Terminal && len(state.Transitions) > 0 {
 			return errors.New("terminal state cannot have transitions")
 		}
-		if state.Workers < 1 {
+		if state.Workers == 0 {
+			state.Workers = 1
+		}
+		if state.Workers < 0 {
 			return errors.New("each state must have at least one worker")
 		}
 		if state.Entrypoint {

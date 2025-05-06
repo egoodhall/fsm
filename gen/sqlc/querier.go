@@ -9,13 +9,13 @@ import (
 )
 
 type Querier interface {
-	CreateTask(ctx context.Context, event []byte) (Task, error)
-	CreateTaskWithID(ctx context.Context, iD int64, event []byte) (Task, error)
+	CreateTask(ctx context.Context, data []byte) (Task, error)
+	CreateTaskWithID(ctx context.Context, iD int64, data []byte) (Task, error)
 	GetHistory(ctx context.Context, taskID int64) ([]StateTransition, error)
 	GetLastValidTransition(ctx context.Context, taskID int64) (StateTransition, error)
 	GetTaskState(ctx context.Context, taskID int64) (string, error)
 	ListTasks(ctx context.Context) ([]Task, error)
-	RecordTransition(ctx context.Context, taskID int64, fromState string, toState string, output []byte) error
+	RecordTransition(ctx context.Context, taskID int64, fromState string, toState string, data []byte) error
 }
 
 var _ Querier = (*Queries)(nil)

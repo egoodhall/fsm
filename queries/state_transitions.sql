@@ -1,5 +1,5 @@
 -- name: RecordTransition :exec
-INSERT INTO state_transitions (task_id, from_state, to_state, output)
+INSERT INTO state_transitions (task_id, from_state, to_state, data)
 VALUES (?, ?, ?, ?);
 
 -- name: GetTaskState :one

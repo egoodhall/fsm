@@ -10,33 +10,33 @@ import (
 )
 
 const createTask = `-- name: CreateTask :one
-INSERT INTO tasks (event)
+INSERT INTO tasks (data)
 VALUES (?)
-RETURNING id, event, created_at
+RETURNING id, data, created_at
 `
 
-func (q *Queries) CreateTask(ctx context.Context, event []byte) (Task, error) {
-	row := q.db.QueryRowContext(ctx, createTask, event)
+func (q *Queries) CreateTask(ctx context.Context, data []byte) (Task, error) {
+	row := q.db.QueryRowContext(ctx, createTask, data)
 	var i Task
-	err := row.Scan(&i.ID, &i.Event, &i.CreatedAt)
+	err := row.Scan(&i.ID, &i.Data, &i.CreatedAt)
 	return i, err
 }
 
 const createTaskWithID = `-- name: CreateTaskWithID :one
-INSERT INTO tasks (id, event)
+INSERT INTO tasks (id, data)
 VALUES (?, ?)
-RETURNING id, event, created_at
+RETURNING id, data, created_at
 `
 
-func (q *Queries) CreateTaskWithID(ctx context.Context, iD int64, event []byte) (Task, error) {
-	row := q.db.QueryRowContext(ctx, createTaskWithID, iD, event)
+func (q *Queries) CreateTaskWithID(ctx context.Context, iD int64, data []byte) (Task, error) {
+	row := q.db.QueryRowContext(ctx, createTaskWithID, iD, data)
 	var i Task
-	err := row.Scan(&i.ID, &i.Event, &i.CreatedAt)
+	err := row.Scan(&i.ID, &i.Data, &i.CreatedAt)
 	return i, err
 }
 
 const listTasks = `-- name: ListTasks :many
-SELECT id, event, created_at FROM tasks
+SELECT id, data, created_at FROM tasks
 ORDER BY id ASC
 `
 
@@ -49,7 +49,7 @@ func (q *Queries) ListTasks(ctx context.Context) ([]Task, error) {
 	var items []Task
 	for rows.Next() {
 		var i Task
-		if err := rows.Scan(&i.ID, &i.Event, &i.CreatedAt); err != nil {
+		if err := rows.Scan(&i.ID, &i.Data, &i.CreatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

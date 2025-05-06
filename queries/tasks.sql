@@ -1,10 +1,10 @@
 -- name: CreateTaskWithID :one
-INSERT INTO tasks (id, event)
+INSERT INTO tasks (id, data)
 VALUES (?, ?)
 RETURNING *;
 
 -- name: CreateTask :one
-INSERT INTO tasks (event)
+INSERT INTO tasks (data)
 VALUES (?)
 RETURNING *;
 

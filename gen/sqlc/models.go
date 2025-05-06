@@ -9,12 +9,12 @@ type StateTransition struct {
 	TaskID    int64
 	FromState string
 	ToState   string
-	Output    []byte
+	Data      []byte
 	CreatedAt int64
 }
 
 type Task struct {
 	ID        int64
-	Event     []byte
+	Data      []byte
 	CreatedAt int64
 }

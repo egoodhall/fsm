@@ -14,20 +14,16 @@ func TestMultistepFSM(t *testing.T) {
 	var completed int
 	fsm, err := example.NewCreateWorkspaceFSMBuilder().
 		CreateRecordState(func(ctx context.Context, transitions example.CreateRecordTransitions, c example.WorkspaceContext) error {
-			slog.Info("create record", "id", fsm.GetTaskID(ctx))
 			return transitions.ToCloneRepo(ctx, c, example.WorkspaceID(1))
 		}).
 		CloneRepoState(func(ctx context.Context, transitions example.CloneRepoTransitions, c example.WorkspaceContext, i example.WorkspaceID) error {
-			slog.Info("clone repo", "id", fsm.GetTaskID(ctx))
 			return transitions.ToDone(ctx, c, i)
 		}).
 		DoneState(func(ctx context.Context, c example.WorkspaceContext, i example.WorkspaceID) error {
-			slog.Info("done", "id", fsm.GetTaskID(ctx))
 			completed++
 			return nil
 		}).
 		ErrorState(func(ctx context.Context, c example.WorkspaceContext) error {
-			slog.Info("error", "id", fsm.GetTaskID(ctx))
 			return nil
 		}).
 		BuildAndStart(t.Context(), fsm.WithLogger(slog.Default()), fsm.InMemory())

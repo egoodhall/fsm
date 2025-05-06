@@ -10,7 +10,7 @@ import (
 )
 
 const getHistory = `-- name: GetHistory :many
-SELECT id, task_id, from_state, to_state, output, created_at FROM state_transitions
+SELECT id, task_id, from_state, to_state, data, created_at FROM state_transitions
 WHERE task_id = ?
 ORDER BY created_at ASC
 `
@@ -29,7 +29,7 @@ func (q *Queries) GetHistory(ctx context.Context, taskID int64) ([]StateTransiti
 			&i.TaskID,
 			&i.FromState,
 			&i.ToState,
-			&i.Output,
+			&i.Data,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -46,7 +46,7 @@ func (q *Queries) GetHistory(ctx context.Context, taskID int64) ([]StateTransiti
 }
 
 const getLastValidTransition = `-- name: GetLastValidTransition :one
-SELECT id, task_id, from_state, to_state, output, created_at FROM state_transitions
+SELECT id, task_id, from_state, to_state, data, created_at FROM state_transitions
 WHERE task_id = ?
   AND to_state != '__error__'
 ORDER BY created_at DESC
@@ -61,7 +61,7 @@ func (q *Queries) GetLastValidTransition(ctx context.Context, taskID int64) (Sta
 		&i.TaskID,
 		&i.FromState,
 		&i.ToState,
-		&i.Output,
+		&i.Data,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -83,16 +83,16 @@ func (q *Queries) GetTaskState(ctx context.Context, taskID int64) (string, error
 }
 
 const recordTransition = `-- name: RecordTransition :exec
-INSERT INTO state_transitions (task_id, from_state, to_state, output)
+INSERT INTO state_transitions (task_id, from_state, to_state, data)
 VALUES (?, ?, ?, ?)
 `
 
-func (q *Queries) RecordTransition(ctx context.Context, taskID int64, fromState string, toState string, output []byte) error {
+func (q *Queries) RecordTransition(ctx context.Context, taskID int64, fromState string, toState string, data []byte) error {
 	_, err := q.db.ExecContext(ctx, recordTransition,
 		taskID,
 		fromState,
 		toState,
-		output,
+		data,
 	)
 	return err
 }
