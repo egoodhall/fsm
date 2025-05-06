@@ -3,24 +3,24 @@ package fsm
 import (
 	"context"
 	"database/sql"
-	"embed"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/egoodhall/fsm/gen/sqlc"
+	"github.com/egoodhall/fsm/migrations"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/pressly/goose/v3"
 )
 
-//go:embed migrations/*.sql
-var migrations embed.FS
+type Q interface {
+	sqlc.Querier
+}
 
 type Store interface {
 	DB() *sql.DB
-	Q() sqlc.Querier
+	Q() Q
 }
 
 var _ Store = &store{}
@@ -33,19 +33,22 @@ func (p *store) DB() *sql.DB {
 	return p.db
 }
 
-func (p *store) Q() sqlc.Querier {
+func (p *store) Q() Q {
 	return sqlc.New(p.db)
 }
 
-func OnDisk(path string) (Store, error) {
-	db, err := initDB(context.Background(), path)
-	if err != nil {
-		return nil, err
+func OnDisk(path string) Option {
+	return func(options SupportsOptions) error {
+		db, err := initDB(context.Background(), path)
+		if err != nil {
+			return err
+		}
+		options.WithStore(&store{db})
+		return nil
 	}
-	return &store{db: db}, nil
 }
 
-func InMemory() (Store, error) {
+func InMemory() Option {
 	return OnDisk("file:fsm.db?mode=memory&cache=shared")
 }
 
@@ -62,18 +65,7 @@ func initDB(ctx context.Context, dbPath string) (*sql.DB, error) {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 
-	return setupDB(ctx, db)
-}
-
-// setupDB runs migrations and returns a querier for interacting with the database.
-func setupDB(ctx context.Context, db *sql.DB) (*sql.DB, error) {
-
-	mdir, err := fs.Sub(migrations, "migrations")
-	if err != nil {
-		return nil, fmt.Errorf("create migrations subdirectory: %w", err)
-	}
-
-	provider, err := goose.NewProvider(goose.DialectSQLite3, db, mdir, goose.WithLogger(goose.NopLogger()))
+	provider, err := goose.NewProvider(goose.DialectSQLite3, db, migrations.FS, goose.WithLogger(goose.NopLogger()))
 	if err != nil {
 		return nil, fmt.Errorf("create goose provider: %w", err)
 	}

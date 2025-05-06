@@ -5,24 +5,37 @@ import (
 	"log/slog"
 )
 
-// Options for the state machine.
-type Option[IN any, OUT any] func(context.Context, *fsm[IN, OUT]) error
+type TransitionListener func(id TaskID, from State, to State, inputs ...any)
+type CompletionListener func(id TaskID, state State)
 
-// Logger sets the logger for the state machine.
-func Logger[IN, OUT any](logger *slog.Logger) Option[IN, OUT] {
-	return func(ctx context.Context, f *fsm[IN, OUT]) error {
-		f.logger = logger
+type SupportsOptions interface {
+	WithContext(update func(ctx context.Context) context.Context)
+	WithStore(store Store)
+	WithTransitionListener(listener TransitionListener)
+	WithCompletionListener(listener CompletionListener)
+}
+
+type Option func(SupportsOptions) error
+
+func WithLogger(logger *slog.Logger) Option {
+	return func(s SupportsOptions) error {
+		s.WithContext(func(ctx context.Context) context.Context {
+			return PutLogger(ctx, logger)
+		})
 		return nil
 	}
 }
 
-// TransitionListener is a function that is called when a transition successfully completes.
-type TransitionListener func(ctx context.Context, id int64, from, to State)
+func WithTransitionListener(listener TransitionListener) Option {
+	return func(s SupportsOptions) error {
+		s.WithTransitionListener(listener)
+		return nil
+	}
+}
 
-// OnTransition sets the function to call when a transition successfully completes.
-func OnTransition[IN, OUT any](fn TransitionListener) Option[IN, OUT] {
-	return func(ctx context.Context, f *fsm[IN, OUT]) error {
-		f.onTransition = fn
+func WithCompletionListener(listener CompletionListener) Option {
+	return func(s SupportsOptions) error {
+		s.WithCompletionListener(listener)
 		return nil
 	}
 }

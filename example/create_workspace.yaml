@@ -1,0 +1,31 @@
+name: CreateWorkspace
+states:
+- 
+  name: CreateRecord
+  entrypoint: true
+  inputs:
+  - WorkspaceContext
+  transitions:
+  - CloneRepo
+  - Error
+- 
+  name: CloneRepo
+  workers: 5
+  inputs:
+  - WorkspaceContext
+  - WorkspaceID
+  transitions:
+  - Done
+  - Error
+- 
+  name: Done
+  terminal: true
+  inputs:
+  - WorkspaceContext
+  - WorkspaceID
+- 
+  name: Error
+  terminal: true
+  inputs:
+  - WorkspaceContext
+

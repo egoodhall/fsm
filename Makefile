@@ -1,14 +1,14 @@
-.PHONY: generate migration
+.PHONY: generate migration grammar
 
 test: generate
-	go test ./...
+	go test -v -count=1 ./...
 
 clean:
 	rm -f fsm.db
 
 # Generate SQLC code
 generate:
-	go generate ./...
+	go generate -v ./...
 
 # Create a new migration file
 migration:
