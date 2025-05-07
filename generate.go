@@ -122,9 +122,11 @@ func nextNonTerminalState(states []StateModel) (StateModel, bool) {
 func generateFSMImplementation(model *FsmModel) []jen.Code {
 	code := make([]jen.Code, 0)
 
+	// State transition messages
 	for _, state := range model.States {
 		code = append(code, jen.Type().Id(model.FsmStateMessageName(state)).StructFunc(func(g *jen.Group) {
 			g.Id("ID").Qual("github.com/egoodhall/fsm", "TaskID")
+			g.Id("Attempt").Int()
 			for i, input := range state.Inputs {
 				g.Id(fmt.Sprintf("P%d", i)).Add(model.RenderType(input))
 			}
@@ -179,7 +181,7 @@ func generateFSMImplementation(model *FsmModel) []jen.Code {
 
 		code = append(code,
 			method.Block(
-				jen.Id("f").Dot(model.FsmStateQueueInternalName(state)).Op("=").Make(jen.Chan().Id(model.FsmStateMessageName(state)), jen.Lit(100)),
+				jen.Id("f").Dot(model.FsmStateQueueInternalName(state)).Op("=").Make(jen.Chan().Id(model.FsmStateMessageName(state)), jen.Lit(state.Queue)),
 				jen.Id("f").Dot(model.FsmStateInternalName(state)).Op("=").Id("fn"),
 				jen.Return(jen.Id("f")),
 			),
@@ -332,6 +334,8 @@ func generateFSMImplementation(model *FsmModel) []jen.Code {
 				Error().
 				Block(
 					jen.Id("id").Op(":=").Qual("github.com/egoodhall/fsm", "GetTaskID").Call(jen.Id("ctx")),
+					jen.Id("fromState").Op(":=").Qual("github.com/egoodhall/fsm", "GetState").Call(jen.Id("ctx")),
+					jen.Id("toState").Op(":=").Qual("github.com/egoodhall/fsm", "State").Call(jen.Id(model.StateName(state))),
 					jen.Id("msg").Op(":=").Id(model.FsmStateMessageName(state)).ValuesFunc(func(g *jen.Group) {
 						g.Id("ID").Op(":").Id("id")
 						for i := range state.Inputs {
@@ -348,11 +352,15 @@ func generateFSMImplementation(model *FsmModel) []jen.Code {
 					jen.If(jen.Err().Op(":=").Id("f").Dot("store").Dot("Q").Call().Dot("RecordTransition").Call(
 						jen.Line().Id("ctx"),
 						jen.Line().Int64().Call(jen.Id("id")),
-						jen.Line().String().Call(jen.Qual("github.com/egoodhall/fsm", "GetState").Call(jen.Id("ctx"))),
-						jen.Line().String().Call(jen.Id(model.StateName(state))),
+						jen.Line().String().Call(jen.Id("fromState")),
+						jen.Line().String().Call(jen.Id("toState")),
 						jen.Line().Id("buf").Dot("Bytes").Call(),
 					), jen.Err().Op("!=").Nil()).Block(
 						jen.Return(jen.Err()),
+					),
+					jen.Qual("github.com/egoodhall/fsm", "Logger").Call(jen.Id("ctx")).Dot("Debug").Call(jen.Lit("Transitioned state"), jen.Lit("id"), jen.Id("id"), jen.Lit("from"), jen.Id("fromState"), jen.Lit("to"), jen.Id("toState")),
+					jen.If(jen.Id("f").Dot("onTransition").Op("!=").Nil()).Block(
+						jen.Id("f").Dot("onTransition").Call(jen.Id("ctx"), jen.Id("msg").Dot("ID"), jen.Id("fromState"), jen.Id("toState")),
 					),
 					jen.Line(),
 					jen.Select().Block(
@@ -360,7 +368,7 @@ func generateFSMImplementation(model *FsmModel) []jen.Code {
 							jen.Return(jen.Nil()),
 						),
 						jen.Case(jen.Op("<-").Id("ctx").Dot("Done").Call()).Block(
-							jen.Return(jen.Qual("errors", "New").Call(jen.Lit("task submission cancelled"))),
+							jen.Return(jen.Qual("fmt", "Errorf").Call(jen.Lit("task submission cancelled: id = %d"), jen.Id("id"))),
 						),
 					),
 				),
@@ -378,9 +386,13 @@ func generateFSMImplementation(model *FsmModel) []jen.Code {
 					jen.Id("ctx").Op(":=").Qual("github.com/egoodhall/fsm", "PutState").Call(jen.Id("f").Dot("ctx"), jen.Qual("github.com/egoodhall/fsm", "State").Call(jen.Id(model.StateName(state)))),
 					jen.For(jen.Id("msg").Op(":=").Range().Id("f").Dot(model.FsmStateQueueInternalName(state))).BlockFunc(func(g *jen.Group) {
 						if state.Terminal {
-							g.Id("f").Dot("onCompletion").Call(jen.Id("ctx"), jen.Id("msg").Dot("ID"), jen.Qual("github.com/egoodhall/fsm", "State").Call(jen.Id(model.StateName(state))))
+							g.If(jen.Id("f").Dot("onCompletion").Op("!=").Nil()).Block(
+								jen.Id("f").Dot("onCompletion").Call(jen.Id("ctx"), jen.Id("msg").Dot("ID"), jen.Qual("github.com/egoodhall/fsm", "State").Call(jen.Id(model.StateName(state)))),
+							)
 						} else {
-							g.Id("f").Dot(model.FsmStateInternalName(state)).CallFunc(func(g *jen.Group) {
+							g.Id("ctx").Op("=").Qual("github.com/egoodhall/fsm", "PutAttempt").Call(jen.Id("ctx"), jen.Id("msg").Dot("Attempt"))
+							g.Qual("github.com/egoodhall/fsm", "Logger").Call(jen.Id("ctx")).Dot("Debug").Call(jen.Lit("Processing message"), jen.Lit("id"), jen.Id("msg").Dot("ID"), jen.Lit("state"), jen.Id(model.StateName(state)))
+							g.If(jen.Err().Op(":=").Id("f").Dot(model.FsmStateInternalName(state)).CallFunc(func(g *jen.Group) {
 								g.Qual("github.com/egoodhall/fsm", "PutTaskID").Call(jen.Id("ctx"), jen.Id("msg").Dot("ID"))
 								if !state.Terminal {
 									g.Id("f")
@@ -388,7 +400,16 @@ func generateFSMImplementation(model *FsmModel) []jen.Code {
 								for i := range state.Inputs {
 									g.Id("msg").Dot(fmt.Sprintf("P%d", i))
 								}
-							})
+							}), jen.Err().Op("!=").Nil()).Block(
+								jen.Go().Func().Params().Block(
+									jen.Qual("github.com/egoodhall/fsm", "Logger").Call(jen.Id("ctx")).Dot("Debug").Call(jen.Lit("Processing error"), jen.Lit("id"), jen.Id("msg").Dot("ID"), jen.Lit("attempt"), jen.Id("msg").Dot("Attempt"), jen.Lit("state"), jen.Id(model.StateName(state)), jen.Lit("error"), jen.Err()),
+									jen.Id("msg").Dot("Attempt").Op("++"),
+									jen.Select().Block(
+										jen.Case(jen.Id("f").Dot(model.FsmStateQueueInternalName(state)).Op("<-").Id("msg")).Block(),
+										jen.Case(jen.Op("<-").Id("ctx").Dot("Done").Call()).Block(),
+									),
+								).Call(),
+							)
 						}
 					}),
 				),

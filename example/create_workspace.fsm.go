@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/gob"
 	"errors"
+	"fmt"
 	fsm "github.com/egoodhall/fsm"
 	"sync"
 )
@@ -69,22 +70,26 @@ var _ CloneRepoTransitions = new(createWorkspaceFSM)
 
 // CreateWorkspaceFSM implementation
 type createRecordParams struct {
-	ID fsm.TaskID
-	P0 WorkspaceContext
+	ID      fsm.TaskID
+	Attempt int
+	P0      WorkspaceContext
 }
 
 type cloneRepoParams struct {
-	ID fsm.TaskID
-	P0 WorkspaceContext
-	P1 WorkspaceID
+	ID      fsm.TaskID
+	Attempt int
+	P0      WorkspaceContext
+	P1      WorkspaceID
 }
 
 type doneParams struct {
-	ID fsm.TaskID
+	ID      fsm.TaskID
+	Attempt int
 }
 
 type errorParams struct {
-	ID fsm.TaskID
+	ID      fsm.TaskID
+	Attempt int
 }
 
 type createWorkspaceFSM struct {
@@ -110,13 +115,13 @@ type createWorkspaceFSM struct {
 // FSM builder methods
 
 func (f *createWorkspaceFSM) CreateRecordState(fn func(context.Context, CreateRecordTransitions, WorkspaceContext) error) CreateWorkspaceFSMBuilder_CloneRepoStage {
-	f.createRecordQueue = make(chan createRecordParams, 100)
+	f.createRecordQueue = make(chan createRecordParams, 0)
 	f.createRecordState = fn
 	return f
 }
 
 func (f *createWorkspaceFSM) CloneRepoState(fn func(context.Context, CloneRepoTransitions, WorkspaceContext, WorkspaceID) error) CreateWorkspaceFSMBuilder__FinalStage {
-	f.cloneRepoQueue = make(chan cloneRepoParams, 100)
+	f.cloneRepoQueue = make(chan cloneRepoParams, 0)
 	f.cloneRepoState = fn
 	return f
 }
@@ -234,6 +239,8 @@ func (f *createWorkspaceFSM) WithCompletionListener(listener fsm.CompletionListe
 
 func (f *createWorkspaceFSM) ToCreateRecord(ctx context.Context, P0 WorkspaceContext) error {
 	id := fsm.GetTaskID(ctx)
+	fromState := fsm.GetState(ctx)
+	toState := fsm.State(CreateWorkspaceStateCreateRecord)
 	msg := createRecordParams{ID: id, P0: P0}
 
 	buf := new(bytes.Buffer)
@@ -244,22 +251,28 @@ func (f *createWorkspaceFSM) ToCreateRecord(ctx context.Context, P0 WorkspaceCon
 	if err := f.store.Q().RecordTransition(
 		ctx,
 		int64(id),
-		string(fsm.GetState(ctx)),
-		string(CreateWorkspaceStateCreateRecord),
+		string(fromState),
+		string(toState),
 		buf.Bytes()); err != nil {
 		return err
+	}
+	fsm.Logger(ctx).Debug("Transitioned state", "id", id, "from", fromState, "to", toState)
+	if f.onTransition != nil {
+		f.onTransition(ctx, msg.ID, fromState, toState)
 	}
 
 	select {
 	case f.createRecordQueue <- msg:
 		return nil
 	case <-ctx.Done():
-		return errors.New("task submission cancelled")
+		return fmt.Errorf("task submission cancelled: id = %d", id)
 	}
 }
 
 func (f *createWorkspaceFSM) ToCloneRepo(ctx context.Context, P0 WorkspaceContext, P1 WorkspaceID) error {
 	id := fsm.GetTaskID(ctx)
+	fromState := fsm.GetState(ctx)
+	toState := fsm.State(CreateWorkspaceStateCloneRepo)
 	msg := cloneRepoParams{ID: id, P0: P0, P1: P1}
 
 	buf := new(bytes.Buffer)
@@ -270,22 +283,28 @@ func (f *createWorkspaceFSM) ToCloneRepo(ctx context.Context, P0 WorkspaceContex
 	if err := f.store.Q().RecordTransition(
 		ctx,
 		int64(id),
-		string(fsm.GetState(ctx)),
-		string(CreateWorkspaceStateCloneRepo),
+		string(fromState),
+		string(toState),
 		buf.Bytes()); err != nil {
 		return err
+	}
+	fsm.Logger(ctx).Debug("Transitioned state", "id", id, "from", fromState, "to", toState)
+	if f.onTransition != nil {
+		f.onTransition(ctx, msg.ID, fromState, toState)
 	}
 
 	select {
 	case f.cloneRepoQueue <- msg:
 		return nil
 	case <-ctx.Done():
-		return errors.New("task submission cancelled")
+		return fmt.Errorf("task submission cancelled: id = %d", id)
 	}
 }
 
 func (f *createWorkspaceFSM) ToDone(ctx context.Context) error {
 	id := fsm.GetTaskID(ctx)
+	fromState := fsm.GetState(ctx)
+	toState := fsm.State(CreateWorkspaceStateDone)
 	msg := doneParams{ID: id}
 
 	buf := new(bytes.Buffer)
@@ -296,22 +315,28 @@ func (f *createWorkspaceFSM) ToDone(ctx context.Context) error {
 	if err := f.store.Q().RecordTransition(
 		ctx,
 		int64(id),
-		string(fsm.GetState(ctx)),
-		string(CreateWorkspaceStateDone),
+		string(fromState),
+		string(toState),
 		buf.Bytes()); err != nil {
 		return err
+	}
+	fsm.Logger(ctx).Debug("Transitioned state", "id", id, "from", fromState, "to", toState)
+	if f.onTransition != nil {
+		f.onTransition(ctx, msg.ID, fromState, toState)
 	}
 
 	select {
 	case f.doneQueue <- msg:
 		return nil
 	case <-ctx.Done():
-		return errors.New("task submission cancelled")
+		return fmt.Errorf("task submission cancelled: id = %d", id)
 	}
 }
 
 func (f *createWorkspaceFSM) ToError(ctx context.Context) error {
 	id := fsm.GetTaskID(ctx)
+	fromState := fsm.GetState(ctx)
+	toState := fsm.State(CreateWorkspaceStateError)
 	msg := errorParams{ID: id}
 
 	buf := new(bytes.Buffer)
@@ -322,45 +347,75 @@ func (f *createWorkspaceFSM) ToError(ctx context.Context) error {
 	if err := f.store.Q().RecordTransition(
 		ctx,
 		int64(id),
-		string(fsm.GetState(ctx)),
-		string(CreateWorkspaceStateError),
+		string(fromState),
+		string(toState),
 		buf.Bytes()); err != nil {
 		return err
+	}
+	fsm.Logger(ctx).Debug("Transitioned state", "id", id, "from", fromState, "to", toState)
+	if f.onTransition != nil {
+		f.onTransition(ctx, msg.ID, fromState, toState)
 	}
 
 	select {
 	case f.errorQueue <- msg:
 		return nil
 	case <-ctx.Done():
-		return errors.New("task submission cancelled")
+		return fmt.Errorf("task submission cancelled: id = %d", id)
 	}
 }
 
 func (f *createWorkspaceFSM) createRecordProcessor() {
 	ctx := fsm.PutState(f.ctx, fsm.State(CreateWorkspaceStateCreateRecord))
 	for msg := range f.createRecordQueue {
-		f.createRecordState(fsm.PutTaskID(ctx, msg.ID), f, msg.P0)
+		ctx = fsm.PutAttempt(ctx, msg.Attempt)
+		fsm.Logger(ctx).Debug("Processing message", "id", msg.ID, "state", CreateWorkspaceStateCreateRecord)
+		if err := f.createRecordState(fsm.PutTaskID(ctx, msg.ID), f, msg.P0); err != nil {
+			go func() {
+				fsm.Logger(ctx).Debug("Processing error", "id", msg.ID, "attempt", msg.Attempt, "state", CreateWorkspaceStateCreateRecord, "error", err)
+				msg.Attempt++
+				select {
+				case f.createRecordQueue <- msg:
+				case <-ctx.Done():
+				}
+			}()
+		}
 	}
 }
 
 func (f *createWorkspaceFSM) cloneRepoProcessor() {
 	ctx := fsm.PutState(f.ctx, fsm.State(CreateWorkspaceStateCloneRepo))
 	for msg := range f.cloneRepoQueue {
-		f.cloneRepoState(fsm.PutTaskID(ctx, msg.ID), f, msg.P0, msg.P1)
+		ctx = fsm.PutAttempt(ctx, msg.Attempt)
+		fsm.Logger(ctx).Debug("Processing message", "id", msg.ID, "state", CreateWorkspaceStateCloneRepo)
+		if err := f.cloneRepoState(fsm.PutTaskID(ctx, msg.ID), f, msg.P0, msg.P1); err != nil {
+			go func() {
+				fsm.Logger(ctx).Debug("Processing error", "id", msg.ID, "attempt", msg.Attempt, "state", CreateWorkspaceStateCloneRepo, "error", err)
+				msg.Attempt++
+				select {
+				case f.cloneRepoQueue <- msg:
+				case <-ctx.Done():
+				}
+			}()
+		}
 	}
 }
 
 func (f *createWorkspaceFSM) doneProcessor() {
 	ctx := fsm.PutState(f.ctx, fsm.State(CreateWorkspaceStateDone))
 	for msg := range f.doneQueue {
-		f.onCompletion(ctx, msg.ID, fsm.State(CreateWorkspaceStateDone))
+		if f.onCompletion != nil {
+			f.onCompletion(ctx, msg.ID, fsm.State(CreateWorkspaceStateDone))
+		}
 	}
 }
 
 func (f *createWorkspaceFSM) errorProcessor() {
 	ctx := fsm.PutState(f.ctx, fsm.State(CreateWorkspaceStateError))
 	for msg := range f.errorQueue {
-		f.onCompletion(ctx, msg.ID, fsm.State(CreateWorkspaceStateError))
+		if f.onCompletion != nil {
+			f.onCompletion(ctx, msg.ID, fsm.State(CreateWorkspaceStateError))
+		}
 	}
 }
 

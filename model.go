@@ -110,6 +110,7 @@ type StateModel struct {
 	Entrypoint  bool     `yaml:"entrypoint"`
 	Terminal    bool     `yaml:"terminal"`
 	Workers     int      `yaml:"workers"`
+	Queue       int      `yaml:"queue"`
 	Inputs      []string `yaml:"inputs"`
 	Transitions []State  `yaml:"transitions"`
 }
@@ -145,6 +146,9 @@ func validateModel(model *FsmModel) error {
 		}
 		if state.Workers < 0 {
 			return errors.New("each state must have at least one worker")
+		}
+		if state.Queue < 0 {
+			state.Queue = 16
 		}
 		if state.Entrypoint {
 			entrypoints++
