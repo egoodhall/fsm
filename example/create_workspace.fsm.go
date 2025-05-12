@@ -69,25 +69,25 @@ var _ CreateRecordTransitions = new(createWorkspaceFSM)
 var _ CloneRepoTransitions = new(createWorkspaceFSM)
 
 // CreateWorkspaceFSM implementation
-type createRecordParams struct {
+type createWorkspaceFSM_CreateRecordParams struct {
 	ID      fsm.TaskID
 	Attempt int
 	P0      WorkspaceContext
 }
 
-type cloneRepoParams struct {
+type createWorkspaceFSM_CloneRepoParams struct {
 	ID      fsm.TaskID
 	Attempt int
 	P0      WorkspaceContext
 	P1      WorkspaceID
 }
 
-type doneParams struct {
+type createWorkspaceFSM_DoneParams struct {
 	ID      fsm.TaskID
 	Attempt int
 }
 
-type errorParams struct {
+type createWorkspaceFSM_ErrorParams struct {
 	ID      fsm.TaskID
 	Attempt int
 }
@@ -106,22 +106,22 @@ type createWorkspaceFSM struct {
 	cloneRepoState    func(context.Context, CloneRepoTransitions, WorkspaceContext, WorkspaceID) error
 
 	// FSM queues
-	createRecordQueue chan createRecordParams
-	cloneRepoQueue    chan cloneRepoParams
-	doneQueue         chan doneParams
-	errorQueue        chan errorParams
+	createRecordQueue chan createWorkspaceFSM_CreateRecordParams
+	cloneRepoQueue    chan createWorkspaceFSM_CloneRepoParams
+	doneQueue         chan createWorkspaceFSM_DoneParams
+	errorQueue        chan createWorkspaceFSM_ErrorParams
 }
 
 // FSM builder methods
 
 func (f *createWorkspaceFSM) CreateRecordState(fn func(context.Context, CreateRecordTransitions, WorkspaceContext) error) CreateWorkspaceFSMBuilder_CloneRepoStage {
-	f.createRecordQueue = make(chan createRecordParams, 0)
+	f.createRecordQueue = make(chan createWorkspaceFSM_CreateRecordParams, 0)
 	f.createRecordState = fn
 	return f
 }
 
 func (f *createWorkspaceFSM) CloneRepoState(fn func(context.Context, CloneRepoTransitions, WorkspaceContext, WorkspaceID) error) CreateWorkspaceFSMBuilder__FinalStage {
-	f.cloneRepoQueue = make(chan cloneRepoParams, 0)
+	f.cloneRepoQueue = make(chan createWorkspaceFSM_CloneRepoParams, 0)
 	f.cloneRepoState = fn
 	return f
 }
@@ -189,7 +189,7 @@ func (f *createWorkspaceFSM) resumeTasks(ctx context.Context) error {
 
 		switch CreateWorkspaceState(transition.ToState) {
 		case CreateWorkspaceStateCreateRecord:
-			var msg createRecordParams
+			var msg createWorkspaceFSM_CreateRecordParams
 			if err := gob.NewDecoder(bytes.NewReader(task.Data)).Decode(&msg); err != nil {
 				return err
 			}
@@ -201,7 +201,7 @@ func (f *createWorkspaceFSM) resumeTasks(ctx context.Context) error {
 				return errors.New("task submission cancelled")
 			}
 		case CreateWorkspaceStateCloneRepo:
-			var msg cloneRepoParams
+			var msg createWorkspaceFSM_CloneRepoParams
 			if err := gob.NewDecoder(bytes.NewReader(task.Data)).Decode(&msg); err != nil {
 				return err
 			}
@@ -241,7 +241,7 @@ func (f *createWorkspaceFSM) ToCreateRecord(ctx context.Context, P0 WorkspaceCon
 	id := fsm.GetTaskID(ctx)
 	fromState := fsm.GetState(ctx)
 	toState := fsm.State(CreateWorkspaceStateCreateRecord)
-	msg := createRecordParams{ID: id, P0: P0}
+	msg := createWorkspaceFSM_CreateRecordParams{ID: id, P0: P0}
 
 	buf := new(bytes.Buffer)
 	if err := gob.NewEncoder(buf).Encode(msg); err != nil {
@@ -273,7 +273,7 @@ func (f *createWorkspaceFSM) ToCloneRepo(ctx context.Context, P0 WorkspaceContex
 	id := fsm.GetTaskID(ctx)
 	fromState := fsm.GetState(ctx)
 	toState := fsm.State(CreateWorkspaceStateCloneRepo)
-	msg := cloneRepoParams{ID: id, P0: P0, P1: P1}
+	msg := createWorkspaceFSM_CloneRepoParams{ID: id, P0: P0, P1: P1}
 
 	buf := new(bytes.Buffer)
 	if err := gob.NewEncoder(buf).Encode(msg); err != nil {
@@ -305,7 +305,7 @@ func (f *createWorkspaceFSM) ToDone(ctx context.Context) error {
 	id := fsm.GetTaskID(ctx)
 	fromState := fsm.GetState(ctx)
 	toState := fsm.State(CreateWorkspaceStateDone)
-	msg := doneParams{ID: id}
+	msg := createWorkspaceFSM_DoneParams{ID: id}
 
 	buf := new(bytes.Buffer)
 	if err := gob.NewEncoder(buf).Encode(msg); err != nil {
@@ -337,7 +337,7 @@ func (f *createWorkspaceFSM) ToError(ctx context.Context) error {
 	id := fsm.GetTaskID(ctx)
 	fromState := fsm.GetState(ctx)
 	toState := fsm.State(CreateWorkspaceStateError)
-	msg := errorParams{ID: id}
+	msg := createWorkspaceFSM_ErrorParams{ID: id}
 
 	buf := new(bytes.Buffer)
 	if err := gob.NewEncoder(buf).Encode(msg); err != nil {
@@ -422,7 +422,7 @@ func (f *createWorkspaceFSM) errorProcessor() {
 // Submit FSM tasks
 
 func (f *createWorkspaceFSM) Submit(ctx context.Context, P0 WorkspaceContext) (fsm.TaskID, error) {
-	msg := createRecordParams{P0: P0}
+	msg := createWorkspaceFSM_CreateRecordParams{P0: P0}
 
 	buf := new(bytes.Buffer)
 	if err := gob.NewEncoder(buf).Encode(msg); err != nil {

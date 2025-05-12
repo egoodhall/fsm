@@ -65,7 +65,7 @@ func (s *FsmModel) FsmBuilderStageMethodName(state StateModel) string {
 }
 
 func (s *FsmModel) FsmStateMessageName(state StateModel) string {
-	return strcase.ToLowerCamel(string(state.Name)) + "Params"
+	return fmt.Sprintf("%s_%sParams", s.FsmInternalName(), strcase.ToCamel(string(state.Name)))
 }
 
 func (s *FsmModel) FsmStateInternalName(state StateModel) string {
@@ -115,9 +115,9 @@ type StateModel struct {
 	Transitions []State  `yaml:"transitions"`
 }
 
-func ParseModel(p []byte) (*FsmModel, error) {
+func ParseModel(p *yaml.Decoder) (*FsmModel, error) {
 	var model FsmModel
-	if err := yaml.Unmarshal(p, &model); err != nil {
+	if err := p.Decode(&model); err != nil {
 		return nil, err
 	}
 	if err := validateModel(&model); err != nil {

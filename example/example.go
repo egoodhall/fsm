@@ -1,6 +1,6 @@
 package example
 
-//go:generate go run ../cmd/fsmgen -out . -pkg example create_workspace.yaml
+//go:generate go run ../cmd/fsmgen -out . -pkg example state_machines.yaml
 
 type WorkspaceID int64
 
