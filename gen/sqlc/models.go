@@ -6,6 +6,7 @@ package sqlc
 
 type StateTransition struct {
 	ID        int64
+	Attempt   int64
 	TaskID    int64
 	FromState string
 	ToState   string

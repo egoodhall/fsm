@@ -39,18 +39,17 @@ func (p *store) Q() Q {
 	return sqlc.New(p.db)
 }
 
-func OnDisk(path string) Option {
-	return func(options SupportsOptions) error {
+func OnDisk(path string) func() (Store, error) {
+	return func() (Store, error) {
 		db, err := initDB(context.Background(), path)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		options.WithStore(&store{db})
-		return nil
+		return &store{db}, nil
 	}
 }
 
-func InMemory() Option {
+func InMemory() func() (Store, error) {
 	return OnDisk("file:fsm.db?mode=memory&cache=shared")
 }
 

@@ -61,7 +61,7 @@ func (s *FsmModel) FsmBuilderStageName(state StateModel) string {
 }
 
 func (s *FsmModel) FsmBuilderStageMethodName(state StateModel) string {
-	return fmt.Sprintf("%sState", strcase.ToCamel(string(state.Name)))
+	return fmt.Sprintf("From%s", strcase.ToCamel(string(state.Name)))
 }
 
 func (s *FsmModel) FsmStateMessageName(state StateModel) string {

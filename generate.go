@@ -143,6 +143,7 @@ func generateFSMImplementation(model *FsmModel) []jen.Code {
 			g.Id("store").Qual("github.com/egoodhall/fsm", "Store")
 			g.Id("onTransition").Qual("github.com/egoodhall/fsm", "TransitionListener")
 			g.Id("onCompletion").Qual("github.com/egoodhall/fsm", "CompletionListener")
+			g.Id("backoff").Qual("github.com/egoodhall/fsm", "Backoff")
 			g.Line()
 			g.Comment("FSM state transitions")
 			for _, state := range model.States {
@@ -181,7 +182,6 @@ func generateFSMImplementation(model *FsmModel) []jen.Code {
 
 		code = append(code,
 			method.Block(
-				jen.Id("f").Dot(model.FsmStateQueueInternalName(state)).Op("=").Make(jen.Chan().Id(model.FsmStateMessageName(state)), jen.Lit(state.Queue)),
 				jen.Id("f").Dot(model.FsmStateInternalName(state)).Op("=").Id("fn"),
 				jen.Return(jen.Id("f")),
 			),
@@ -205,6 +205,11 @@ func generateFSMImplementation(model *FsmModel) []jen.Code {
 				g.Comment("Set context")
 				g.Id("f").Dot("ctx").Op("=").Id("ctx")
 				g.Line()
+				g.Comment("Initialize state queues")
+				for _, state := range model.States {
+					g.Id("f").Dot(model.FsmStateQueueInternalName(state)).Op("=").Make(jen.Chan().Id(model.FsmStateMessageName(state)), jen.Lit(max(state.Queue, 5)))
+				}
+				g.Line()
 				// Apply options
 				g.Comment("Apply options")
 				g.For(jen.List(jen.Id("_"), jen.Id("opt")).Op(":=").Range().Id("opts")).Block(
@@ -213,9 +218,14 @@ func generateFSMImplementation(model *FsmModel) []jen.Code {
 					),
 				)
 				g.If(jen.Id("f").Dot("store").Op("==").Nil()).Block(
-					jen.If(jen.Err().Op(":=").Qual("github.com/egoodhall/fsm", "InMemory").Call().Call(jen.Id("f")), jen.Err().Op("!=").Nil()).Block(
+					jen.If(jen.List(jen.Id("store"), jen.Err()).Op(":=").Qual("github.com/egoodhall/fsm", "InMemory").Call().Call(), jen.Err().Op("!=").Nil()).Block(
 						jen.Return(jen.Nil(), jen.Err()),
+					).Else().Block(
+						jen.Id("f").Dot("store").Op("=").Id("store"),
 					),
+				)
+				g.If(jen.Id("f").Dot("backoff").Op("==").Nil()).Block(
+					jen.Id("f").Dot("backoff").Op("=").Qual("github.com/egoodhall/fsm", "LinearBackoff").Call(jen.Lit(500).Op("*").Qual("time", "Millisecond"), jen.Lit(30).Op("*").Qual("time", "Second")),
 				)
 				g.Line()
 				// Start FSM processors
@@ -316,6 +326,13 @@ func generateFSMImplementation(model *FsmModel) []jen.Code {
 			Block(
 				jen.Id("f").Dot("onCompletion").Op("=").Id("listener"),
 			),
+		jen.Func().
+			Params(jen.Id("f").Op("*").Id(model.FsmInternalName())).
+			Id("WithBackoff").
+			Params(jen.Id("backoff").Qual("github.com/egoodhall/fsm", "Backoff")).
+			Block(
+				jen.Id("f").Dot("backoff").Op("=").Id("backoff"),
+			),
 	)
 
 	// FSM transition methods
@@ -350,11 +367,15 @@ func generateFSMImplementation(model *FsmModel) []jen.Code {
 					),
 					jen.Line(),
 					jen.If(jen.Err().Op(":=").Id("f").Dot("store").Dot("Q").Call().Dot("RecordTransition").Call(
-						jen.Line().Id("ctx"),
-						jen.Line().Int64().Call(jen.Id("id")),
-						jen.Line().String().Call(jen.Id("fromState")),
-						jen.Line().String().Call(jen.Id("toState")),
-						jen.Line().Id("buf").Dot("Bytes").Call(),
+						jen.Id("ctx"),
+						jen.Qual("github.com/egoodhall/fsm/gen/sqlc", "RecordTransitionParams").ValuesFunc(func(g *jen.Group) {
+							g.Line().Id("TaskID").Op(":").Int64().Call(jen.Id("id"))
+							g.Line().Id("Attempt").Op(":").Int64().Call(jen.Qual("github.com/egoodhall/fsm", "GetAttempt").Call(jen.Id("ctx")))
+							g.Line().Id("FromState").Op(":").String().Call(jen.Id("fromState"))
+							g.Line().Id("ToState").Op(":").String().Call(jen.Id("toState"))
+							g.Line().Id("Data").Op(":").Id("buf").Dot("Bytes").Call()
+							g.Line()
+						}),
 					), jen.Err().Op("!=").Nil()).Block(
 						jen.Return(jen.Err()),
 					),
@@ -390,10 +411,10 @@ func generateFSMImplementation(model *FsmModel) []jen.Code {
 								jen.Id("f").Dot("onCompletion").Call(jen.Id("ctx"), jen.Id("msg").Dot("ID"), jen.Qual("github.com/egoodhall/fsm", "State").Call(jen.Id(model.StateName(state)))),
 							)
 						} else {
-							g.Id("ctx").Op("=").Qual("github.com/egoodhall/fsm", "PutAttempt").Call(jen.Id("ctx"), jen.Id("msg").Dot("Attempt"))
-							g.Qual("github.com/egoodhall/fsm", "Logger").Call(jen.Id("ctx")).Dot("Debug").Call(jen.Lit("Processing message"), jen.Lit("id"), jen.Id("msg").Dot("ID"), jen.Lit("state"), jen.Id(model.StateName(state)))
+							g.Id("ctx2").Op(":=").Qual("github.com/egoodhall/fsm", "PutAttempt").Call(jen.Id("ctx"), jen.Id("msg").Dot("Attempt"))
+							g.Qual("github.com/egoodhall/fsm", "Logger").Call(jen.Id("ctx2")).Dot("Debug").Call(jen.Lit("Processing message"), jen.Lit("id"), jen.Id("msg").Dot("ID"), jen.Lit("attempt"), jen.Id("msg").Dot("Attempt"), jen.Lit("state"), jen.Id(model.StateName(state)))
 							g.If(jen.Err().Op(":=").Id("f").Dot(model.FsmStateInternalName(state)).CallFunc(func(g *jen.Group) {
-								g.Qual("github.com/egoodhall/fsm", "PutTaskID").Call(jen.Id("ctx"), jen.Id("msg").Dot("ID"))
+								g.Qual("github.com/egoodhall/fsm", "PutTaskID").Call(jen.Id("ctx2"), jen.Id("msg").Dot("ID"))
 								if !state.Terminal {
 									g.Id("f")
 								}
@@ -401,9 +422,25 @@ func generateFSMImplementation(model *FsmModel) []jen.Code {
 									g.Id("msg").Dot(fmt.Sprintf("P%d", i))
 								}
 							}), jen.Err().Op("!=").Nil()).Block(
+								jen.Id("msg").Dot("Attempt").Op("++"),
+								jen.Id("delay").Op(":=").Id("f").Dot("backoff").Call(jen.Id("msg").Dot("Attempt")),
+								jen.Qual("github.com/egoodhall/fsm", "Logger").Call(jen.Id("ctx")).Dot("Debug").Call(jen.Lit("Processing error"), jen.Lit("id"), jen.Id("msg").Dot("ID"), jen.Lit("attempt"), jen.Id("msg").Dot("Attempt"), jen.Lit("delay"), jen.Id("delay"), jen.Lit("state"), jen.Id(model.StateName(state)), jen.Lit("error"), jen.Err()),
+								jen.If(jen.Err().Op(":=").Id("f").Dot("store").Dot("Q").Call().Dot("RecordTransition").Call(
+									jen.Id("ctx2"),
+									jen.Qual("github.com/egoodhall/fsm/gen/sqlc", "RecordTransitionParams").ValuesFunc(func(g *jen.Group) {
+										g.Line().Id("TaskID").Op(":").Int64().Call(jen.Id("msg").Dot("ID"))
+										g.Line().Id("Attempt").Op(":").Int64().Call(jen.Id("msg").Dot("Attempt"))
+										g.Line().Id("FromState").Op(":").String().Call(jen.Id(model.StateName(state)))
+										g.Line().Id("ToState").Op(":").String().Call(jen.Qual("github.com/egoodhall/fsm", "StateError"))
+										g.Line().Id("Data").Op(":").Id("[]byte").Call(jen.Id("err").Dot("Error").Call())
+										g.Line()
+									}),
+								), jen.Err().Op("!=").Nil()).Block(
+									jen.Qual("github.com/egoodhall/fsm", "Logger").Call(jen.Id("ctx")).Dot("Debug").Call(jen.Lit("Failed to record transition"), jen.Lit("id"), jen.Id("msg").Dot("ID"), jen.Lit("attempt"), jen.Id("msg").Dot("Attempt"), jen.Lit("delay"), jen.Id("delay"), jen.Lit("state"), jen.Id(model.StateName(state)), jen.Lit("error"), jen.Err()),
+								),
+								jen.Line(),
 								jen.Go().Func().Params().Block(
-									jen.Qual("github.com/egoodhall/fsm", "Logger").Call(jen.Id("ctx")).Dot("Debug").Call(jen.Lit("Processing error"), jen.Lit("id"), jen.Id("msg").Dot("ID"), jen.Lit("attempt"), jen.Id("msg").Dot("Attempt"), jen.Lit("state"), jen.Id(model.StateName(state)), jen.Lit("error"), jen.Err()),
-									jen.Id("msg").Dot("Attempt").Op("++"),
+									jen.Op("<-").Qual("time", "After").Call(jen.Id("delay")),
 									jen.Select().Block(
 										jen.Case(jen.Id("f").Dot(model.FsmStateQueueInternalName(state)).Op("<-").Id("msg")).Block(),
 										jen.Case(jen.Op("<-").Id("ctx").Dot("Done").Call()).Block(),

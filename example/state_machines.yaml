@@ -1,54 +1,21 @@
 ---
 # FSM for creating a workspace
-name: CreateWorkspace
+name: TestMachine
 states:
 -
-  name: CreateRecord
+  name: State1
   entrypoint: true
   inputs:
-  - WorkspaceContext
+  - int
   transitions:
-  - CloneRepo
-  - Error
+  - State2
 -
-  name: CloneRepo
+  name: State2
   workers: 5
   inputs:
-  - WorkspaceContext
-  - WorkspaceID
+  - int
   transitions:
   - Done
-  - Error
 -
   name: Done
-  terminal: true
--
-  name: Error
-  terminal: true
----
-# FSM for deleting a workspace
-name: DeleteWorkspace
-states:
--
-  name: DeleteRecord
-  entrypoint: true
-  inputs:
-  - WorkspaceContext
-  transitions:
-  - DeleteRepo
-  - Error
--
-  name: DeleteRepo
-  workers: 5
-  inputs:
-  - WorkspaceContext
-  - WorkspaceID
-  transitions:
-  - Done
-  - Error
--
-  name: Done
-  terminal: true
--
-  name: Error
   terminal: true

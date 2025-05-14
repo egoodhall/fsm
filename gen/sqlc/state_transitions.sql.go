@@ -10,7 +10,7 @@ import (
 )
 
 const getHistory = `-- name: GetHistory :many
-SELECT id, task_id, from_state, to_state, data, created_at FROM state_transitions
+SELECT id, attempt, task_id, from_state, to_state, data, created_at FROM state_transitions
 WHERE task_id = ?
 ORDER BY created_at ASC
 `
@@ -26,6 +26,7 @@ func (q *Queries) GetHistory(ctx context.Context, taskID int64) ([]StateTransiti
 		var i StateTransition
 		if err := rows.Scan(
 			&i.ID,
+			&i.Attempt,
 			&i.TaskID,
 			&i.FromState,
 			&i.ToState,
@@ -46,7 +47,7 @@ func (q *Queries) GetHistory(ctx context.Context, taskID int64) ([]StateTransiti
 }
 
 const getLastValidTransition = `-- name: GetLastValidTransition :one
-SELECT id, task_id, from_state, to_state, data, created_at FROM state_transitions
+SELECT id, attempt, task_id, from_state, to_state, data, created_at FROM state_transitions
 WHERE task_id = ?
   AND to_state != '__error__'
 ORDER BY created_at DESC
@@ -58,6 +59,7 @@ func (q *Queries) GetLastValidTransition(ctx context.Context, taskID int64) (Sta
 	var i StateTransition
 	err := row.Scan(
 		&i.ID,
+		&i.Attempt,
 		&i.TaskID,
 		&i.FromState,
 		&i.ToState,
@@ -83,16 +85,25 @@ func (q *Queries) GetTaskState(ctx context.Context, taskID int64) (string, error
 }
 
 const recordTransition = `-- name: RecordTransition :exec
-INSERT INTO state_transitions (task_id, from_state, to_state, data)
-VALUES (?, ?, ?, ?)
+INSERT INTO state_transitions (task_id, attempt, from_state, to_state, data)
+VALUES (?, ?, ?, ?, ?)
 `
 
-func (q *Queries) RecordTransition(ctx context.Context, taskID int64, fromState string, toState string, data []byte) error {
+type RecordTransitionParams struct {
+	TaskID    int64
+	Attempt   int64
+	FromState string
+	ToState   string
+	Data      []byte
+}
+
+func (q *Queries) RecordTransition(ctx context.Context, arg RecordTransitionParams) error {
 	_, err := q.db.ExecContext(ctx, recordTransition,
-		taskID,
-		fromState,
-		toState,
-		data,
+		arg.TaskID,
+		arg.Attempt,
+		arg.FromState,
+		arg.ToState,
+		arg.Data,
 	)
 	return err
 }

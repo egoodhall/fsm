@@ -11,6 +11,7 @@ type CompletionListener func(ctx context.Context, id TaskID, state State)
 type SupportsOptions interface {
 	WithContext(update func(ctx context.Context) context.Context)
 	WithStore(store Store)
+	WithBackoff(backoff Backoff)
 	WithTransitionListener(listener TransitionListener)
 	WithCompletionListener(listener CompletionListener)
 }
@@ -36,6 +37,24 @@ func WithTransitionListener(listener TransitionListener) Option {
 func WithCompletionListener(listener CompletionListener) Option {
 	return func(s SupportsOptions) error {
 		s.WithCompletionListener(listener)
+		return nil
+	}
+}
+
+func WithBackoff(backoff Backoff) Option {
+	return func(s SupportsOptions) error {
+		s.WithBackoff(backoff)
+		return nil
+	}
+}
+
+func WithStore(provider func() (Store, error)) Option {
+	return func(s SupportsOptions) error {
+		store, err := provider()
+		if err != nil {
+			return err
+		}
+		s.WithStore(store)
 		return nil
 	}
 }
