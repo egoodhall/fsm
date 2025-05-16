@@ -13,12 +13,10 @@ import (
 	"time"
 )
 
-type TestMachineState fsm.State
-
 const (
-	TestMachineStateState1 TestMachineState = "State1"
-	TestMachineStateState2 TestMachineState = "State2"
-	TestMachineStateDone   TestMachineState = "Done"
+	TestMachineStateState1 fsm.State = "State1"
+	TestMachineStateState2 fsm.State = "State2"
+	TestMachineStateDone   fsm.State = "Done"
 )
 
 type TestMachineFSM interface {
@@ -179,7 +177,7 @@ func (f *testMachineFSM) resumeTasks(ctx context.Context) error {
 			return err
 		}
 
-		switch TestMachineState(transition.ToState) {
+		switch fsm.State(transition.ToState) {
 		case TestMachineStateState1:
 			var msg testMachineFSM_State1Params
 			if err := gob.NewDecoder(bytes.NewReader(task.Data)).Decode(&msg); err != nil {

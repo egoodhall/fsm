@@ -43,11 +43,9 @@ func Generate(pkg string, model *FsmModel) *jen.File {
 func generatePublicInterfaces(model *FsmModel) []jen.Code {
 	code := make([]jen.Code, 0)
 
-	code = append(code, jen.Type().Id(model.StateTypeName()).Qual("github.com/egoodhall/fsm", "State"))
-
 	code = append(code, jen.Const().DefsFunc(func(g *jen.Group) {
 		for _, state := range model.States {
-			g.Id(model.StateName(state)).Id(model.StateTypeName()).Op("=").Lit(string(state.Name))
+			g.Id(model.StateName(state)).Qual("github.com/egoodhall/fsm", "State").Op("=").Lit(string(state.Name))
 		}
 	}))
 
@@ -268,7 +266,7 @@ func generateFSMImplementation(model *FsmModel) []jen.Code {
 						jen.Return(jen.Err()),
 					)
 					g.Line()
-					g.Switch(jen.Id(model.StateTypeName()).Call(jen.Id("transition").Dot("ToState"))).BlockFunc(func(g *jen.Group) {
+					g.Switch(jen.Qual("github.com/egoodhall/fsm", "State").Call(jen.Id("transition").Dot("ToState"))).BlockFunc(func(g *jen.Group) {
 						for _, state := range model.States {
 							if state.Terminal {
 								continue
