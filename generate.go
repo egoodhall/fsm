@@ -241,7 +241,7 @@ func generateFSMImplementation(model *FsmModel) []jen.Code {
 				g.Line()
 				// Resume tasks
 				g.Comment("Resume existingtasks")
-				g.If(jen.Err().Op(":=").Id("f").Dot("resumeTasks").Call(jen.Id("ctx")), jen.Err().Op("!=").Nil()).Block(
+				g.If(jen.Err().Op(":=").Id("f").Dot("resumeTasks").Call(), jen.Err().Op("!=").Nil()).Block(
 					jen.Return(jen.Nil(), jen.Err()),
 				)
 				// Return FSM
@@ -252,16 +252,14 @@ func generateFSMImplementation(model *FsmModel) []jen.Code {
 	// Resume tasks
 	code = append(code,
 		jen.Func().Params(jen.Id("f").Op("*").Id(model.FsmInternalName())).
-			Id("resumeTasks").
-			Params(jen.Id("ctx").Qual("context", "Context")).
-			Error().
+			Id("resumeTasks").Params().Error().
 			Block(
-				jen.List(jen.Id("tasks"), jen.Err()).Op(":=").Id("f").Dot("store").Dot("Q").Call().Dot("ListTasks").Call(jen.Id("ctx")),
+				jen.List(jen.Id("tasks"), jen.Err()).Op(":=").Id("f").Dot("store").Dot("Q").Call().Dot("ListTasks").Call(jen.Id("f").Dot("ctx")),
 				jen.If(jen.Err().Op("!=").Nil()).Block(
 					jen.Return(jen.Err()),
 				),
 				jen.For(jen.List(jen.Id("_"), jen.Id("task")).Op(":=").Range().Id("tasks")).BlockFunc(func(g *jen.Group) {
-					g.List(jen.Id("transition"), jen.Err()).Op(":=").Id("f").Dot("store").Dot("Q").Call().Dot("GetLastValidTransition").Call(jen.Id("ctx"), jen.Id("task").Dot("ID"))
+					g.List(jen.Id("transition"), jen.Err()).Op(":=").Id("f").Dot("store").Dot("Q").Call().Dot("GetLastValidTransition").Call(jen.Id("f").Dot("ctx"), jen.Id("task").Dot("ID"))
 					g.If(jen.Err().Op("!=").Nil()).Block(
 						jen.Return(jen.Err()),
 					)
@@ -276,12 +274,12 @@ func generateFSMImplementation(model *FsmModel) []jen.Code {
 								jen.If(jen.Err().Op(":=").Qual("encoding/gob", "NewDecoder").Call(jen.Qual("bytes", "NewReader").Call(jen.Id("task").Dot("Data"))).Dot("Decode").Call(jen.Op("&").Id("msg")), jen.Err().Op("!=").Nil()).Block(
 									jen.Return(jen.Err()),
 								),
-								jen.Qual("github.com/egoodhall/fsm", "Logger").Call(jen.Id("ctx")).Dot("Info").Call(jen.Lit("Resuming task"), jen.Lit("id"), jen.Id("task").Dot("ID")),
+								jen.Qual("github.com/egoodhall/fsm", "Logger").Call(jen.Id("f").Dot("ctx")).Dot("Info").Call(jen.Lit("Resuming task"), jen.Lit("id"), jen.Id("task").Dot("ID")),
 								jen.Select().Block(
 									jen.Case(jen.Id("f").Dot(model.FsmStateQueueInternalName(state)).Op("<-").Id("msg")).Block(
 										jen.Return(jen.Nil()),
 									),
-									jen.Case(jen.Op("<-").Id("ctx").Dot("Done").Call()).Block(
+									jen.Case(jen.Op("<-").Id("f").Dot("ctx").Dot("Done").Call()).Block(
 										jen.Return(jen.Qual("errors", "New").Call(jen.Lit("task submission cancelled"))),
 									),
 								),

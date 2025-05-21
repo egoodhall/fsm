@@ -160,19 +160,19 @@ func (f *testMachineFSM) BuildAndStart(ctx context.Context, opts ...fsm.Option) 
 	go f.doneProcessor()
 
 	// Resume existingtasks
-	if err := f.resumeTasks(ctx); err != nil {
+	if err := f.resumeTasks(); err != nil {
 		return nil, err
 	}
 	return f, nil
 }
 
-func (f *testMachineFSM) resumeTasks(ctx context.Context) error {
-	tasks, err := f.store.Q().ListTasks(ctx)
+func (f *testMachineFSM) resumeTasks() error {
+	tasks, err := f.store.Q().ListTasks(f.ctx)
 	if err != nil {
 		return err
 	}
 	for _, task := range tasks {
-		transition, err := f.store.Q().GetLastValidTransition(ctx, task.ID)
+		transition, err := f.store.Q().GetLastValidTransition(f.ctx, task.ID)
 		if err != nil {
 			return err
 		}
@@ -183,11 +183,11 @@ func (f *testMachineFSM) resumeTasks(ctx context.Context) error {
 			if err := gob.NewDecoder(bytes.NewReader(task.Data)).Decode(&msg); err != nil {
 				return err
 			}
-			fsm.Logger(ctx).Info("Resuming task", "id", task.ID)
+			fsm.Logger(f.ctx).Info("Resuming task", "id", task.ID)
 			select {
 			case f.state1Queue <- msg:
 				return nil
-			case <-ctx.Done():
+			case <-f.ctx.Done():
 				return errors.New("task submission cancelled")
 			}
 		case TestMachineStateState2:
@@ -195,11 +195,11 @@ func (f *testMachineFSM) resumeTasks(ctx context.Context) error {
 			if err := gob.NewDecoder(bytes.NewReader(task.Data)).Decode(&msg); err != nil {
 				return err
 			}
-			fsm.Logger(ctx).Info("Resuming task", "id", task.ID)
+			fsm.Logger(f.ctx).Info("Resuming task", "id", task.ID)
 			select {
 			case f.state2Queue <- msg:
 				return nil
-			case <-ctx.Done():
+			case <-f.ctx.Done():
 				return errors.New("task submission cancelled")
 			}
 		}
