@@ -14,72 +14,72 @@ import (
 )
 
 const (
-	TestMachineStateState1 fsm.State = "State1"
-	TestMachineStateState2 fsm.State = "State2"
-	TestMachineStateDone   fsm.State = "Done"
+	TestMachine2StateState1 fsm.State = "State1"
+	TestMachine2StateState2 fsm.State = "State2"
+	TestMachine2StateDone   fsm.State = "Done"
 )
 
-type TestMachineFSM interface {
+type TestMachine2FSM interface {
 	fsm.SupportsOptions
 	Submit(ctx context.Context, int int) (fsm.TaskID, error)
 }
 
-func NewTestMachineFSMBuilder() TestMachineFSMBuilder_State1Stage {
-	return new(testMachineFSM)
+func NewTestMachine2FSMBuilder() TestMachine2FSMBuilder_State1Stage {
+	return new(testMachine2FSM)
 }
 
-type TestMachineState1Transitions interface {
+type TestMachine2State1Transitions interface {
 	ToState2(context.Context, int) error
 }
 
-type TestMachineState2Transitions interface {
+type TestMachine2State2Transitions interface {
 	ToDone(context.Context) error
 }
 
-type TestMachineFSMBuilder_State1Stage interface {
-	FromState1(func(context.Context, TestMachineState1Transitions, int) error) TestMachineFSMBuilder_State2Stage
+type TestMachine2FSMBuilder_State1Stage interface {
+	FromState1(func(context.Context, TestMachine2State1Transitions, int) error) TestMachine2FSMBuilder_State2Stage
 }
 
-type TestMachineFSMBuilder_State2Stage interface {
-	FromState2(func(context.Context, TestMachineState2Transitions, int) error) TestMachineFSMBuilder__FinalStage
+type TestMachine2FSMBuilder_State2Stage interface {
+	FromState2(func(context.Context, TestMachine2State2Transitions, int) error) TestMachine2FSMBuilder__FinalStage
 }
 
-type TestMachineFSMBuilder_DoneStage interface {
-	FromDone(func(context.Context) error) TestMachineFSMBuilder__FinalStage
+type TestMachine2FSMBuilder_DoneStage interface {
+	FromDone(func(context.Context) error) TestMachine2FSMBuilder__FinalStage
 }
 
-type TestMachineFSMBuilder__FinalStage interface {
-	BuildAndStart(context.Context, ...fsm.Option) (TestMachineFSM, error)
+type TestMachine2FSMBuilder__FinalStage interface {
+	BuildAndStart(context.Context, ...fsm.Option) (TestMachine2FSM, error)
 }
 
 // FSM type checks
-var _ TestMachineFSM = new(testMachineFSM)
-var _ fsm.SupportsOptions = new(testMachineFSM)
-var _ TestMachineFSMBuilder_State1Stage = new(testMachineFSM)
-var _ TestMachineFSMBuilder_State2Stage = new(testMachineFSM)
-var _ TestMachineFSMBuilder__FinalStage = new(testMachineFSM)
-var _ TestMachineState1Transitions = new(testMachineFSM)
-var _ TestMachineState2Transitions = new(testMachineFSM)
+var _ TestMachine2FSM = new(testMachine2FSM)
+var _ fsm.SupportsOptions = new(testMachine2FSM)
+var _ TestMachine2FSMBuilder_State1Stage = new(testMachine2FSM)
+var _ TestMachine2FSMBuilder_State2Stage = new(testMachine2FSM)
+var _ TestMachine2FSMBuilder__FinalStage = new(testMachine2FSM)
+var _ TestMachine2State1Transitions = new(testMachine2FSM)
+var _ TestMachine2State2Transitions = new(testMachine2FSM)
 
-// TestMachineFSM implementation
-type testMachineFSM_State1Params struct {
+// TestMachine2FSM implementation
+type testMachine2FSM_State1Params struct {
 	ID      fsm.TaskID
 	Attempt int
 	P0      int
 }
 
-type testMachineFSM_State2Params struct {
+type testMachine2FSM_State2Params struct {
 	ID      fsm.TaskID
 	Attempt int
 	P0      int
 }
 
-type testMachineFSM_DoneParams struct {
+type testMachine2FSM_DoneParams struct {
 	ID      fsm.TaskID
 	Attempt int
 }
 
-type testMachineFSM struct {
+type testMachine2FSM struct {
 	lock sync.Mutex
 	ctx  context.Context
 
@@ -90,28 +90,28 @@ type testMachineFSM struct {
 	backoff      fsm.Backoff
 
 	// FSM state transitions
-	state1State func(context.Context, TestMachineState1Transitions, int) error
-	state2State func(context.Context, TestMachineState2Transitions, int) error
+	state1State func(context.Context, TestMachine2State1Transitions, int) error
+	state2State func(context.Context, TestMachine2State2Transitions, int) error
 
 	// FSM queues
-	state1Queue chan testMachineFSM_State1Params
-	state2Queue chan testMachineFSM_State2Params
-	doneQueue   chan testMachineFSM_DoneParams
+	state1Queue chan testMachine2FSM_State1Params
+	state2Queue chan testMachine2FSM_State2Params
+	doneQueue   chan testMachine2FSM_DoneParams
 }
 
 // FSM builder methods
 
-func (f *testMachineFSM) FromState1(fn func(context.Context, TestMachineState1Transitions, int) error) TestMachineFSMBuilder_State2Stage {
+func (f *testMachine2FSM) FromState1(fn func(context.Context, TestMachine2State1Transitions, int) error) TestMachine2FSMBuilder_State2Stage {
 	f.state1State = fn
 	return f
 }
 
-func (f *testMachineFSM) FromState2(fn func(context.Context, TestMachineState2Transitions, int) error) TestMachineFSMBuilder__FinalStage {
+func (f *testMachine2FSM) FromState2(fn func(context.Context, TestMachine2State2Transitions, int) error) TestMachine2FSMBuilder__FinalStage {
 	f.state2State = fn
 	return f
 }
 
-func (f *testMachineFSM) BuildAndStart(ctx context.Context, opts ...fsm.Option) (TestMachineFSM, error) {
+func (f *testMachine2FSM) BuildAndStart(ctx context.Context, opts ...fsm.Option) (TestMachine2FSM, error) {
 	// Check if FSM is already started
 	if !f.lock.TryLock() {
 		return nil, errors.New("FSM already started")
@@ -121,9 +121,9 @@ func (f *testMachineFSM) BuildAndStart(ctx context.Context, opts ...fsm.Option) 
 	f.ctx = ctx
 
 	// Initialize state queues
-	f.state1Queue = make(chan testMachineFSM_State1Params, 5)
-	f.state2Queue = make(chan testMachineFSM_State2Params, 5)
-	f.doneQueue = make(chan testMachineFSM_DoneParams, 5)
+	f.state1Queue = make(chan testMachine2FSM_State1Params, 5)
+	f.state2Queue = make(chan testMachine2FSM_State2Params, 5)
+	f.doneQueue = make(chan testMachine2FSM_DoneParams, 5)
 
 	// Apply options
 	for _, opt := range opts {
@@ -166,7 +166,7 @@ func (f *testMachineFSM) BuildAndStart(ctx context.Context, opts ...fsm.Option) 
 	return f, nil
 }
 
-func (f *testMachineFSM) resumeTasks() error {
+func (f *testMachine2FSM) resumeTasks() error {
 	tasks, err := f.store.Q().ListTasks(f.ctx)
 	if err != nil {
 		return err
@@ -178,8 +178,8 @@ func (f *testMachineFSM) resumeTasks() error {
 		}
 
 		switch fsm.State(transition.ToState) {
-		case TestMachineStateState1:
-			var msg testMachineFSM_State1Params
+		case TestMachine2StateState1:
+			var msg testMachine2FSM_State1Params
 			if err := gob.NewDecoder(bytes.NewReader(task.Data)).Decode(&msg); err != nil {
 				return err
 			}
@@ -190,8 +190,8 @@ func (f *testMachineFSM) resumeTasks() error {
 			case <-f.ctx.Done():
 				return errors.New("task submission cancelled")
 			}
-		case TestMachineStateState2:
-			var msg testMachineFSM_State2Params
+		case TestMachine2StateState2:
+			var msg testMachine2FSM_State2Params
 			if err := gob.NewDecoder(bytes.NewReader(task.Data)).Decode(&msg); err != nil {
 				return err
 			}
@@ -209,33 +209,33 @@ func (f *testMachineFSM) resumeTasks() error {
 
 // FSM options
 
-func (f *testMachineFSM) WithStore(store fsm.Store) {
+func (f *testMachine2FSM) WithStore(store fsm.Store) {
 	f.store = store
 }
 
-func (f *testMachineFSM) WithContext(update func(context.Context) context.Context) {
+func (f *testMachine2FSM) WithContext(update func(context.Context) context.Context) {
 	f.ctx = update(f.ctx)
 }
 
-func (f *testMachineFSM) WithTransitionListener(listener fsm.TransitionListener) {
+func (f *testMachine2FSM) WithTransitionListener(listener fsm.TransitionListener) {
 	f.onTransition = listener
 }
 
-func (f *testMachineFSM) WithCompletionListener(listener fsm.CompletionListener) {
+func (f *testMachine2FSM) WithCompletionListener(listener fsm.CompletionListener) {
 	f.onCompletion = listener
 }
 
-func (f *testMachineFSM) WithBackoff(backoff fsm.Backoff) {
+func (f *testMachine2FSM) WithBackoff(backoff fsm.Backoff) {
 	f.backoff = backoff
 }
 
 // FSM transition methods
 
-func (f *testMachineFSM) ToState1(ctx context.Context, P0 int) error {
+func (f *testMachine2FSM) ToState1(ctx context.Context, P0 int) error {
 	id := fsm.GetTaskID(ctx)
 	fromState := fsm.GetState(ctx)
-	toState := fsm.State(TestMachineStateState1)
-	msg := testMachineFSM_State1Params{ID: id, P0: P0}
+	toState := fsm.State(TestMachine2StateState1)
+	msg := testMachine2FSM_State1Params{ID: id, P0: P0}
 
 	buf := new(bytes.Buffer)
 	if err := gob.NewEncoder(buf).Encode(msg); err != nil {
@@ -264,11 +264,11 @@ func (f *testMachineFSM) ToState1(ctx context.Context, P0 int) error {
 	}
 }
 
-func (f *testMachineFSM) ToState2(ctx context.Context, P0 int) error {
+func (f *testMachine2FSM) ToState2(ctx context.Context, P0 int) error {
 	id := fsm.GetTaskID(ctx)
 	fromState := fsm.GetState(ctx)
-	toState := fsm.State(TestMachineStateState2)
-	msg := testMachineFSM_State2Params{ID: id, P0: P0}
+	toState := fsm.State(TestMachine2StateState2)
+	msg := testMachine2FSM_State2Params{ID: id, P0: P0}
 
 	buf := new(bytes.Buffer)
 	if err := gob.NewEncoder(buf).Encode(msg); err != nil {
@@ -297,11 +297,11 @@ func (f *testMachineFSM) ToState2(ctx context.Context, P0 int) error {
 	}
 }
 
-func (f *testMachineFSM) ToDone(ctx context.Context) error {
+func (f *testMachine2FSM) ToDone(ctx context.Context) error {
 	id := fsm.GetTaskID(ctx)
 	fromState := fsm.GetState(ctx)
-	toState := fsm.State(TestMachineStateDone)
-	msg := testMachineFSM_DoneParams{ID: id}
+	toState := fsm.State(TestMachine2StateDone)
+	msg := testMachine2FSM_DoneParams{ID: id}
 
 	buf := new(bytes.Buffer)
 	if err := gob.NewEncoder(buf).Encode(msg); err != nil {
@@ -330,23 +330,23 @@ func (f *testMachineFSM) ToDone(ctx context.Context) error {
 	}
 }
 
-func (f *testMachineFSM) state1Processor() {
-	ctx := fsm.PutState(f.ctx, fsm.State(TestMachineStateState1))
+func (f *testMachine2FSM) state1Processor() {
+	ctx := fsm.PutState(f.ctx, fsm.State(TestMachine2StateState1))
 	for msg := range f.state1Queue {
 		ctx2 := fsm.PutAttempt(ctx, msg.Attempt)
-		fsm.Logger(ctx2).Debug("Processing message", "id", msg.ID, "attempt", msg.Attempt, "state", TestMachineStateState1)
+		fsm.Logger(ctx2).Debug("Processing message", "id", msg.ID, "attempt", msg.Attempt, "state", TestMachine2StateState1)
 		if err := f.state1State(fsm.PutTaskID(ctx2, msg.ID), f, msg.P0); err != nil {
 			msg.Attempt++
 			delay := f.backoff(msg.Attempt)
-			fsm.Logger(ctx).Debug("Processing error", "id", msg.ID, "attempt", msg.Attempt, "delay", delay, "state", TestMachineStateState1, "error", err)
+			fsm.Logger(ctx).Debug("Processing error", "id", msg.ID, "attempt", msg.Attempt, "delay", delay, "state", TestMachine2StateState1, "error", err)
 			if err := f.store.Q().RecordTransition(ctx2, sqlc.RecordTransitionParams{
 				TaskID:    int64(msg.ID),
 				Attempt:   int64(msg.Attempt),
-				FromState: string(TestMachineStateState1),
+				FromState: string(TestMachine2StateState1),
 				ToState:   string(fsm.StateError),
 				Data:      []byte(err.Error()),
 			}); err != nil {
-				fsm.Logger(ctx).Debug("Failed to record transition", "id", msg.ID, "attempt", msg.Attempt, "delay", delay, "state", TestMachineStateState1, "error", err)
+				fsm.Logger(ctx).Debug("Failed to record transition", "id", msg.ID, "attempt", msg.Attempt, "delay", delay, "state", TestMachine2StateState1, "error", err)
 			}
 
 			go func() {
@@ -360,23 +360,23 @@ func (f *testMachineFSM) state1Processor() {
 	}
 }
 
-func (f *testMachineFSM) state2Processor() {
-	ctx := fsm.PutState(f.ctx, fsm.State(TestMachineStateState2))
+func (f *testMachine2FSM) state2Processor() {
+	ctx := fsm.PutState(f.ctx, fsm.State(TestMachine2StateState2))
 	for msg := range f.state2Queue {
 		ctx2 := fsm.PutAttempt(ctx, msg.Attempt)
-		fsm.Logger(ctx2).Debug("Processing message", "id", msg.ID, "attempt", msg.Attempt, "state", TestMachineStateState2)
+		fsm.Logger(ctx2).Debug("Processing message", "id", msg.ID, "attempt", msg.Attempt, "state", TestMachine2StateState2)
 		if err := f.state2State(fsm.PutTaskID(ctx2, msg.ID), f, msg.P0); err != nil {
 			msg.Attempt++
 			delay := f.backoff(msg.Attempt)
-			fsm.Logger(ctx).Debug("Processing error", "id", msg.ID, "attempt", msg.Attempt, "delay", delay, "state", TestMachineStateState2, "error", err)
+			fsm.Logger(ctx).Debug("Processing error", "id", msg.ID, "attempt", msg.Attempt, "delay", delay, "state", TestMachine2StateState2, "error", err)
 			if err := f.store.Q().RecordTransition(ctx2, sqlc.RecordTransitionParams{
 				TaskID:    int64(msg.ID),
 				Attempt:   int64(msg.Attempt),
-				FromState: string(TestMachineStateState2),
+				FromState: string(TestMachine2StateState2),
 				ToState:   string(fsm.StateError),
 				Data:      []byte(err.Error()),
 			}); err != nil {
-				fsm.Logger(ctx).Debug("Failed to record transition", "id", msg.ID, "attempt", msg.Attempt, "delay", delay, "state", TestMachineStateState2, "error", err)
+				fsm.Logger(ctx).Debug("Failed to record transition", "id", msg.ID, "attempt", msg.Attempt, "delay", delay, "state", TestMachine2StateState2, "error", err)
 			}
 
 			go func() {
@@ -390,19 +390,19 @@ func (f *testMachineFSM) state2Processor() {
 	}
 }
 
-func (f *testMachineFSM) doneProcessor() {
-	ctx := fsm.PutState(f.ctx, fsm.State(TestMachineStateDone))
+func (f *testMachine2FSM) doneProcessor() {
+	ctx := fsm.PutState(f.ctx, fsm.State(TestMachine2StateDone))
 	for msg := range f.doneQueue {
 		if f.onCompletion != nil {
-			f.onCompletion(ctx, msg.ID, fsm.State(TestMachineStateDone))
+			f.onCompletion(ctx, msg.ID, fsm.State(TestMachine2StateDone))
 		}
 	}
 }
 
 // Submit FSM tasks
 
-func (f *testMachineFSM) Submit(ctx context.Context, P0 int) (fsm.TaskID, error) {
-	msg := testMachineFSM_State1Params{P0: P0}
+func (f *testMachine2FSM) Submit(ctx context.Context, P0 int) (fsm.TaskID, error) {
+	msg := testMachine2FSM_State1Params{P0: P0}
 
 	buf := new(bytes.Buffer)
 	if err := gob.NewEncoder(buf).Encode(msg); err != nil {

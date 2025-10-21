@@ -21,13 +21,13 @@ func TestMultistepFSM(t *testing.T) {
 	slog.SetLogLoggerLevel(slog.LevelDebug)
 
 	f, err := example.NewTestMachineFSMBuilder().
-		FromState1(func(ctx context.Context, transitions example.State1Transitions, c int) error {
+		FromState1(func(ctx context.Context, transitions example.TestMachineState1Transitions, c int) error {
 			if fsm.GetAttempt(ctx) == 0 {
 				return errors.New("first attempt")
 			}
 			return transitions.ToState2(ctx, c)
 		}).
-		FromState2(func(ctx context.Context, transitions example.State2Transitions, c int) error {
+		FromState2(func(ctx context.Context, transitions example.TestMachineState2Transitions, c int) error {
 			return transitions.ToDone(ctx)
 		}).
 		BuildAndStart(t.Context(),

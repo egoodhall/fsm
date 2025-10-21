@@ -97,7 +97,7 @@ func (s *FsmModel) TransitionToName(to State) string {
 }
 
 func (s *FsmModel) TransitionsParamTypeName(state StateModel) string {
-	return strcase.ToCamel(string(state.Name)) + "Transitions"
+	return strcase.ToCamel(s.Name) + strcase.ToCamel(string(state.Name)) + "Transitions"
 }
 
 type TypeModel struct {

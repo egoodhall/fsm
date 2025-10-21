@@ -233,7 +233,7 @@ func generateFSMImplementation(model *FsmModel) []jen.Code {
 					if state.Workers == 1 {
 						g.Go().Id("f").Dot(model.FsmStateProcessorName(state)).Call()
 					} else {
-						g.For(jen.Id("i").Op(":=").Lit(0), jen.Id("i").Op("<").Lit(state.Workers), jen.Id("i").Op("++")).Block(
+						g.For(jen.Id("_").Op("=").Range().Lit(state.Workers)).Block(
 							g.Go().Id("f").Dot(model.FsmStateProcessorName(state)).Call(),
 						)
 					}

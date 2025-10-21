@@ -1,0 +1,29 @@
+[tools]
+go = "latest"
+"go:github.com/pressly/goose/v3/cmd/goose" = "latest"
+"go:github.com/sqlc-dev/sqlc/cmd/sqlc" = "latest"
+sqlite = "latest"
+
+[tasks.test]
+description = "Run tests"
+run = "go test -v -count=1 ./..."
+depends = ["generate"]
+
+[tasks.generate]
+description = "Generate source code"
+run = [
+    "sqlc generate",
+    "go run ./cmd/fsmgen -out example -pkg example example/state_machines.yaml"
+]
+
+[tasks.clean]
+description = "Remove local DB"
+run = "rm -f fsm.db"
+
+[tasks.migration]
+description = "Create a new migration"
+run = """
+#!/usr/bin/env bash
+read -p "Enter migration name: " name
+goose -dir migrations create $name sql
+"""

@@ -2,20 +2,35 @@
 # FSM for creating a workspace
 name: TestMachine
 states:
--
-  name: State1
-  entrypoint: true
-  inputs:
-  - int
-  transitions:
-  - State2
--
-  name: State2
-  workers: 5
-  inputs:
-  - int
-  transitions:
-  - Done
--
-  name: Done
-  terminal: true
+  - name: State1
+    entrypoint: true
+    inputs:
+      - int
+    transitions:
+      - State2
+  - name: State2
+    workers: 5
+    inputs:
+      - int
+    transitions:
+      - Done
+  - name: Done
+    terminal: true
+---
+# FSM for creating a workspace
+name: TestMachine2
+states:
+  - name: State1
+    entrypoint: true
+    inputs:
+      - int
+    transitions:
+      - State2
+  - name: State2
+    workers: 5
+    inputs:
+      - int
+    transitions:
+      - Done
+  - name: Done
+    terminal: true
