@@ -143,20 +143,13 @@ func (f *testMachineFSM) BuildAndStart(ctx context.Context, opts ...fsm.Option) 
 	}
 
 	// Start FSM processors
-	// Start 0 state1Processor processors
-	for _ = range 0 {
-		go f.state1Processor()
-	}
+	// Start 1 state1Processor
 	go f.state1Processor()
-	// Start 5 state2Processor processors
+	// Start 5 state2Processors
 	for _ = range 5 {
 		go f.state2Processor()
 	}
-	go f.state2Processor()
-	// Start 0 doneProcessor processors
-	for _ = range 0 {
-		go f.doneProcessor()
-	}
+	// Start 1 doneProcessor
 	go f.doneProcessor()
 
 	// Resume existingtasks

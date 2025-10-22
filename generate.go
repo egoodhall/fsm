@@ -229,12 +229,13 @@ func generateFSMImplementation(model *FsmModel) []jen.Code {
 				// Start FSM processors
 				g.Comment("Start FSM processors")
 				for _, state := range model.States {
-					g.Commentf("Start %d %s processors", state.Workers, model.FsmStateProcessorName(state))
-					if state.Workers == 1 {
+					if state.Workers <= 1 {
+						g.Commentf("Start 1 %s", model.FsmStateProcessorName(state))
 						g.Go().Id("f").Dot(model.FsmStateProcessorName(state)).Call()
 					} else {
+						g.Commentf("Start %d %ss", state.Workers, model.FsmStateProcessorName(state))
 						g.For(jen.Id("_").Op("=").Range().Lit(state.Workers)).Block(
-							g.Go().Id("f").Dot(model.FsmStateProcessorName(state)).Call(),
+							jen.Go().Id("f").Dot(model.FsmStateProcessorName(state)).Call(),
 						)
 					}
 				}
